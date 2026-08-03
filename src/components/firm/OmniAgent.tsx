@@ -7,7 +7,7 @@ import {
   Handshake, Grid3x3, Info, Mic, MicOff, Cpu, Gauge,
   Megaphone, Car, Cog, FlaskConical, Plane, TrendingUp, Copyright, Video,
   HardHat, BadgeCheck, Wrench, ShoppingBag, Library, Network, Mountain, Grid2x2,
-  Wheat, Fingerprint,
+  Wheat, Fingerprint, Vault,
 } from 'lucide-react';
 import { supabase, formatDate } from '@/lib/financeUtils';
 import type { OmniCommand, OmniSubtask, OmniAuditLog, OmniEngine } from '@/lib/firmTypes';
@@ -25,7 +25,7 @@ const ENGINE_ICONS: Record<string, typeof Brain> = {
   CircuitBoard, Brain, Building2, Megaphone, Car, Cog, FlaskConical,
   Plane, TrendingUp, Copyright, Video, HardHat, Radio, BadgeCheck, Wrench,
   ShoppingBag, Library, Network, Mountain, Grid2x2,
-  Wheat, Fingerprint,
+  Wheat, Fingerprint, Vault,
 };
 
 const INTENT_ICON_MAP: Record<string, string> = {
@@ -54,6 +54,7 @@ const INTENT_ICON_MAP: Record<string, string> = {
   iot_bridge: 'Cpu',
   disaster_recovery: 'ShieldAlert',
   biometric_gateway: 'Fingerprint',
+  vault_connector: 'Vault',
   general: 'CircuitBoard',
 };
 
@@ -78,6 +79,8 @@ const EXAMPLE_COMMANDS = [
   'رصد تنبيه من حساس حرارة في مخزن التبريد — افتح تذكرة عاجلة ووثق الحادث',
   'فعّل بروتوكول غرفة الحوار واعزل الخوادم المصابة وابلغ الإدارة بتنبيه أحمر',
   'تحقق من هوية المدير بيومترياً قبل اعتماد عقد الاستحواذ الجديد',
+  'اسحب البيان الضريبي لشركة الأطلس من البوابة الخلفية وقم بمطابقته مع العقود في الأرشيف',
+  'اسحب بيان التخليص الجمركي للشحنة القادمة من الجمارك وأرشفه في الملف القانوني',
 ];
 
 export default function OmniAgent({ voiceAdd }: { voiceAdd?: () => PendingAddCommand | null }) {

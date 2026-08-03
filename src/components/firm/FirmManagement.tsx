@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Home, Building2, Calendar, Users, FileText, CheckSquare, Briefcase, UserCog, Banknote, Video, Radar, Brain, Command, Wallet, Shield, FileStack, KanbanSquare, Mail, ShieldCheck, Gavel, Landmark, Building, Heart, Scale, HardHat, MessageSquareWarning, Award, Lightbulb, Copyright, PenTool, Newspaper, Cpu, FileSignature, Globe, Store, Ship, TrendingUp, AlertTriangle, Split, Lock, Plane, Receipt, Leaf, Zap, ShoppingCart, Trophy, GraduationCap, School, MapPin, Truck, Network, Search, BookOpen, ScanText, FolderArchive, Users as UsersIcon, Database, AudioWaveform, HeartPulse, Mic, Stethoscope, Radio, Train, Calculator, Hotel, Factory, Megaphone, Car, Cog, FlaskConical, ShoppingBag, Library, Wrench, Mountain, Grid2x2, Wheat, ShieldAlert, Fingerprint } from 'lucide-react';
+import { Home, Building2, Calendar, Users, FileText, CheckSquare, Briefcase, UserCog, Banknote, Video, Radar, Brain, Command, Wallet, Shield, FileStack, KanbanSquare, Mail, ShieldCheck, Gavel, Landmark, Building, Heart, Scale, HardHat, MessageSquareWarning, Award, Lightbulb, Copyright, PenTool, Newspaper, Cpu, FileSignature, Globe, Store, Ship, TrendingUp, AlertTriangle, Split, Lock, Plane, Receipt, Leaf, Zap, ShoppingCart, Trophy, GraduationCap, School, MapPin, Truck, Network, Search, BookOpen, ScanText, FolderArchive, Users as UsersIcon, Database, AudioWaveform, HeartPulse, Mic, Stethoscope, Radio, Train, Calculator, Hotel, Factory, Megaphone, Car, Cog, FlaskConical, ShoppingBag, Library, Wrench, Mountain, Grid2x2, Wheat, ShieldAlert, Fingerprint, Vault } from 'lucide-react';
 import type { FirmModule } from '@/lib/firmTypes';
 import { useVoice } from '@/lib/voiceContext';
 import type { FirmModuleId, PendingAddCommand } from '@/lib/voiceTypes';
@@ -118,6 +118,7 @@ import FoodSecurityEngine from './FoodSecurityEngine';
 import IoTBridgeEngine from './IoTBridgeEngine';
 import DisasterRecoveryEngine from './DisasterRecoveryEngine';
 import BiometricGatewayEngine from './BiometricGatewayEngine';
+import VaultConnectorEngine from './VaultConnectorEngine';
 
 interface FirmPageProps {
   onBackToSite: () => void;
@@ -241,6 +242,7 @@ const moduleConfig: { id: FirmModule; label: string; icon: typeof Building2 }[] 
   { id: 'iot-bridge', label: 'إنترنت الأشياء والرقابة (M107)', icon: Cpu },
   { id: 'disaster-recovery', label: 'استمرارية الأعمال والتعافي (M108)', icon: ShieldAlert },
   { id: 'biometric-gateway', label: 'بوابة الهوية البيومترية (M109)', icon: Fingerprint },
+  { id: 'vault-connector', label: 'البوابة الخلفية السيادية (M110)', icon: Vault },
 ];
 
 export default function FirmManagement({ onBackToSite, pendingAdd, consumePendingAdd }: FirmPageProps) {
@@ -449,6 +451,7 @@ export default function FirmManagement({ onBackToSite, pendingAdd, consumePendin
         {activeModule === 'iot-bridge' && <IoTBridgeEngine voiceAdd={takePending} />}
         {activeModule === 'disaster-recovery' && <DisasterRecoveryEngine voiceAdd={takePending} />}
         {activeModule === 'biometric-gateway' && <BiometricGatewayEngine voiceAdd={takePending} />}
+        {activeModule === 'vault-connector' && <VaultConnectorEngine voiceAdd={takePending} />}
       </div>
     </div>
   );

@@ -113,7 +113,88 @@ export type FirmModule =
   | 'food-security'
   | 'iot-bridge'
   | 'disaster-recovery'
-  | 'biometric-gateway';
+  | 'biometric-gateway'
+  | 'vault-connector';
+
+export interface M110VaultProvider {
+  id: string;
+  provider_code: string;
+  provider_name: string;
+  provider_name_ar: string;
+  provider_type: string;
+  api_endpoint: string | null;
+  protocol_type: string;
+  auth_method: string;
+  rate_limit_per_min: number;
+  rate_limit_per_hour: number;
+  active: boolean;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface M110VaultPull {
+  id: string;
+  pull_number: string;
+  pull_title: string;
+  provider_id: string | null;
+  provider_code: string | null;
+  pull_type: string;
+  stage: string;
+  status: string;
+  source_format: string | null;
+  source_url: string | null;
+  file_hash_pre: string | null;
+  malware_scan_passed: boolean;
+  sanitized: boolean;
+  content_hash: string | null;
+  hash_algorithm: string;
+  digital_signature: string | null;
+  hsm_key_id: string | null;
+  sealed: boolean;
+  sealed_at: string | null;
+  vault_partition: string | null;
+  worm_committed: boolean;
+  worm_committed_at: string | null;
+  storage_path: string | null;
+  metadata_extracted: Record<string, unknown> | null;
+  entity_id_linked: string | null;
+  ocr_processed: boolean;
+  ocr_text: string | null;
+  retrieval_count: number;
+  last_retrieved_at: string | null;
+  tunnel_id: string | null;
+  m85_tax_linked: boolean;
+  m10_case_opened: boolean;
+  m53_document_id: string | null;
+  m54_finance_linked: boolean;
+  m92_notified: boolean;
+  m109_biometric_signed: boolean;
+  cost_center_id: string | null;
+  ecdh_key_exchange: string | null;
+  payload_encrypted: boolean;
+  rate_limited: boolean;
+  description: string | null;
+  advisor_id: string | null;
+  created_at: string;
+  updated_at: string;
+  provider?: M110VaultProvider;
+  advisor?: { name: string };
+}
+
+export interface M110VaultAudit {
+  id: string;
+  pull_id: string | null;
+  provider_code: string | null;
+  action: string;
+  actor: string | null;
+  actor_role: string | null;
+  stage: string | null;
+  detail: string | null;
+  hash_chain: string;
+  previous_hash: string | null;
+  created_at: string;
+}
 
 export interface Case {
   id: string;

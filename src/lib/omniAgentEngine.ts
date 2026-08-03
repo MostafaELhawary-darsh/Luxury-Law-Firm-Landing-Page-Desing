@@ -682,6 +682,36 @@ const patterns: IntentPattern[] = [
       return subtasks;
     },
   },
+  {
+    intent: 'vault_connector',
+    intentLabel: 'بوابة سيادية',
+    keywords: ['بوابة خلفية', 'سحب بيانات', 'مصلحة الضرائب', 'الجمارك', 'السجل المدني', 'السجل التجاري', 'البوابة القضائية', 'ختم سيادي', 'WORM', 'SHA3', 'vault', 'جهة حكومية', 'ربط جهات', 'مطابقة الفواتير', 'سحب وثيقة', 'سحب بيان ضريبي', 'سحب بيان جمركي'],
+    entities: (input) => {
+      const entities: string[] = [];
+      if (/ضرائب|ضريبي|TAX/.test(input)) entities.push('TAX');
+      if (/جمارك|جمركي|CUSTOMS/.test(input)) entities.push('CUSTOMS');
+      if (/سجل مدني|أحوال|CIVIL/.test(input)) entities.push('CIVIL');
+      if (/سجل تجاري|تجاري|COMMERCIAL/.test(input)) entities.push('COMMERCIAL');
+      if (/قضائ|قضائية|JUDICIAL/.test(input)) entities.push('JUDICIAL');
+      const companyMatch = input.match(/(?:شركة|مؤسسة|كيان)\s+(\S+(?:\s+\S+)?)/);
+      if (companyMatch) entities.push(companyMatch[1]);
+      return entities;
+    },
+    subtaskBuilder: (entities) => {
+      const providerCode = entities.find(e => ['TAX','CUSTOMS','CIVIL','COMMERCIAL','JUDICIAL'].includes(e)) || 'TAX';
+      const entityName = entities.find(e => !['TAX','CUSTOMS','CIVIL','COMMERCIAL','JUDICIAL'].includes(e)) || 'الكيان';
+      const subtasks: DecomposedSubtask[] = [
+        { engine_code: 'M110', engine_name_ar: 'البوابة السيادية', task_title: `سحب بيانات من ${providerCode === 'TAX' ? 'مصلحة الضرائب' : providerCode === 'CUSTOMS' ? 'مصلحة الجمارك' : providerCode === 'CIVIL' ? 'السجل المدني' : providerCode === 'COMMERCIAL' ? 'السجل التجاري' : 'البوابة القضائية'}`, task_description: `سحب البيانات الخاصة بـ ${entityName} وتأمينها بختم SHA3-512`, department: 'البوابة السيادية', execution_order: 1 },
+        { engine_code: 'M53', engine_name_ar: 'محرك الوثائق السيادي', task_title: 'أرشفة في المستودع WORM', task_description: `حفظ المستند المسحوب في قسم معزول بنمط WORM`, department: 'الأرشيف', execution_order: 2 },
+      ];
+      if (providerCode === 'TAX') {
+        subtasks.push({ engine_code: 'M85', engine_name_ar: 'المحاسبة والضرائب', task_title: 'مطابقة الفواتير', task_description: `مطابقة الفاتورة المسحوبة مع السجلات المحاسبية لـ ${entityName}`, department: 'المحاسبة', execution_order: 3 });
+      }
+      subtasks.push({ engine_code: 'M10', engine_name_ar: 'نواة القضية', task_title: 'ربط بالملف القانوني', task_description: `إدراج الوثيقة المسحوبة في الملف القانوني المعني`, department: 'القسم القانوني', execution_order: subtasks.length + 1 });
+      subtasks.push({ engine_code: 'M92', engine_name_ar: 'الوكيل الذكي السيادي', task_title: 'تسجيل في سجل التدقيق', task_description: 'تسجيل عملية السحب في دفتر الأستاذ غير القابل للتلاعب', department: 'التنسيق المركزي', execution_order: subtasks.length + 1 });
+      return subtasks;
+    },
+  },
 ];
 
 const fallbackPattern: IntentPattern = {
@@ -758,6 +788,7 @@ export const INTENT_ICONS: Record<string, string> = {
   iot_bridge: 'Cpu',
   disaster_recovery: 'ShieldAlert',
   biometric_gateway: 'Fingerprint',
+  vault_connector: 'Vault',
 };
 
 export const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; dot: string }> = {
@@ -820,4 +851,5 @@ export const DEPARTMENT_LABELS: Record<string, string> = {
   'إنترنت الأشياء': 'إنترنت الأشياء',
   'البنية التحتية': 'البنية التحتية',
   'الهوية والأمن': 'الهوية والأمن',
+  'البوابة السيادية': 'البوابة السيادية',
 };
