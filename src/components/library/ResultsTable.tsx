@@ -160,7 +160,15 @@ export default function ResultsTable({
                   {columns.map((col) => (
                     <td key={col.key} className={`px-4 py-3 font-body text-xs text-ink/80 ${col.width || ''}`}>
                       {col.key === 'actions' ? (
-                        <button className="text-gold hover:text-gold-dark transition-colors">
+                        <button
+                          // منع فقاعات النقر حتى لا يتم استدعاء onRowClick مرتين
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRowClick(row);
+                          }}
+                          className="text-gold hover:text-gold-dark transition-colors"
+                          aria-label="عرض"
+                        >
                           <Eye size={16} />
                         </button>
                       ) : (
