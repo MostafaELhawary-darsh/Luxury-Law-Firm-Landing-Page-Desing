@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "luxury_law_backend"
+version = "0.1.0"
+description = "FastAPI backend scaffold for Luxury Law Firm project"
+authors = ["Converted by Copilot"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.100.0"
+uvicorn = {extras = ["standard"], version = "^0.22.0"}
+Pydantic = "^2.5.1"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
