@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Loader2, CheckCircle2 } from 'lucide-react';
-import { supabase } from '@/lib/financeUtils';
+import { postContactRequest } from '@/services/api';
 
 interface ContactModalProps {
   open: boolean;
@@ -13,6 +13,7 @@ export default function ContactModal({ open, onClose }: ContactModalProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<Status>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -22,6 +23,7 @@ export default function ContactModal({ open, onClose }: ContactModalProps) {
       setStatus('idle');
       setName('');
       setEmail('');
+      setErrorMessage(null);
     }
     return () => {
       document.body.style.overflow = '';
@@ -44,18 +46,22 @@ export default function ContactModal({ open, onClose }: ContactModalProps) {
     if (!name.trim() || !email.trim()) return;
 
     setStatus('submitting');
+    setErrorMessage(null);
 
     try {
-      const { error } = await supabase.from('contact_requests').insert({
-        name: name.trim(),
-        email: email.trim(),
-      });
-
-      if (error) throw error;
-
+      await postContactRequest(name.trim(), email.trim());
       setStatus('success');
-    } catch (err) {
+
+      // Close modal automatically after short success display
+      setTimeout(() => {
+        onClose();
+        setStatus('idle');
+        setName('');
+        setEmail('');
+      }, 1800);
+    } catch (err: any) {
       console.error('Submission error:', err);
+      setErrorMessage(err?.message || 'حدث خطأ غير متوقع');
       setStatus('error');
     }
   };
@@ -65,14 +71,14 @@ export default function ContactModal({ open, onClose }: ContactModalProps) {
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-midnight-deep/90 backdrop-blur-sm animate-fade-in"
-        onClick={onClose}
+        onClick={() => { if (status !== 'submitting') onClose(); }}
       />
 
       {/* Modal */}
       <div className="relative w-full max-w-md bg-midnight border border-gold/30 p-10 lg:p-12 animate-fade-in-up">
         {/* Close button */}
         <button
-          onClick={onClose}
+          onClick={() => { if (status !== 'submitting') onClose(); }}
           className="absolute top-5 left-5 text-cream/40 hover:text-gold transition-colors duration-300"
           aria-label="إغلاق"
         >
@@ -92,7 +98,7 @@ export default function ContactModal({ open, onClose }: ContactModalProps) {
               ضمن بروتوكول السرية التامة الخاص بالمؤسسة.
             </p>
             <button
-              onClick={onClose}
+              onClick={() => { onClose(); setStatus('idle'); }}
               className="px-8 py-3 border border-gold/40 text-gold hover:bg-gold hover:text-midnight transition-all duration-500 text-sm font-body"
             >
               إغلاق
@@ -128,7 +134,7 @@ export default function ContactModal({ open, onClose }: ContactModalProps) {
                   onChange={(e) => setName(e.target.value)}
                   required
                   disabled={status === 'submitting'}
-                  className="w-full bg-transparent border-b border-cream/20 focus:border-gold py-3 text-cream font-body text-base outline-none transition-colors duration-500 placeholder:text-cream/20 disabled:opacity-50"
+                  className="w-full bg-transparent border-b border-cream/20 focus:border-gold py-3 text-cream font-body text-base outline-none transition-colors duration-500 placeholder:text-cream"
                   placeholder="أدخل اسمك"
                 />
               </div>
@@ -143,7 +149,7 @@ export default function ContactModal({ open, onClose }: ContactModalProps) {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   disabled={status === 'submitting'}
-                  className="w-full bg-transparent border-b border-cream/20 focus:border-gold py-3 text-cream font-body text-base outline-none transition-colors duration-500 placeholder:text-cream/20 disabled:opacity-50"
+                  className="w-full bg-transparent border-b border-cream/20 focus:border-gold py-3 text-cream font-body text-base outline-none transition-colors duration-500 placeholder:text-cream"
                   placeholder="name@example.com"
                   dir="ltr"
                 />
@@ -151,7 +157,7 @@ export default function ContactModal({ open, onClose }: ContactModalProps) {
 
               {status === 'error' && (
                 <p className="font-body text-sm text-red-400 text-center">
-                  حدث خطأ ما. يرجى المحاولة مرة أخرى.
+                  {errorMessage || 'حدث خطأ ما. يرجى المحاولة مرة أخرى.'}
                 </p>
               )}
 
