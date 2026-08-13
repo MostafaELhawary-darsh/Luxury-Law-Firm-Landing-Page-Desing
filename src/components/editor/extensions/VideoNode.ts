@@ -1,5 +1,4 @@
 import { Node, mergeAttributes } from '@tiptap/core';
-import { VueNodeViewRenderer } from '@tiptap/vue-3';
 
 export interface VideoNodeAttrs {
   src: string;
@@ -37,7 +36,13 @@ const VideoNode = Node.create({
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['video', mergeAttributes(HTMLAttributes, { controls: true, style: 'max-width: 100%; border-radius: 0.5rem; margin: 1rem 0;' })]
+    return [
+      'video',
+      mergeAttributes(HTMLAttributes, {
+        controls: true,
+        style: 'max-width: 100%; border-radius: 0.5rem; margin: 1rem 0;',
+      }),
+    ];
   },
 
   addCommands() {
