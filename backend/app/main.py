@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.core.config import settings
-from app.api.v1 import users, cases, auth
+from app.api.v1 import users, cases, auth, contact
 from app.db.base import Base
 from app.db.session import engine
 
@@ -44,8 +44,9 @@ async def health_check():
 app.include_router(auth.router, prefix=settings.API_V1_STR)
 app.include_router(users.router, prefix=settings.API_V1_STR)
 app.include_router(cases.router, prefix=settings.API_V1_STR)
+app.include_router(contact.router, prefix=settings.API_V1_STR)
 
-@app.get("/", tags=["root"])
+@app.get("/", tags=["root"]) 
 async def root():
     """
     Root endpoint with API information.
