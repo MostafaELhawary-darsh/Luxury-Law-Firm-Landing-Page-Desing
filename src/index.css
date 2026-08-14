@@ -1,0 +1,201 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    font-family: 'Tajawal', sans-serif;
+    background-color: #0B132B;
+    color: #F8F9FA;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background-color: #C5A059;
+    color: #0B132B;
+  }
+}
+
+@layer utilities {
+  .font-heading {
+    font-family: 'Cairo', sans-serif;
+  }
+
+  .font-body {
+    font-family: 'Tajawal', sans-serif;
+  }
+
+  .font-serif-en {
+    font-family: 'Playfair Display', serif;
+  }
+
+  .text-gradient-gold {
+    background: linear-gradient(135deg, #D4AF37 0%, #C5A059 50%, #B8941F 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gold-line {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #C5A059, transparent);
+  }
+
+  .gold-line-vertical {
+    width: 1px;
+    background: linear-gradient(180deg, transparent, #C5A059, transparent);
+  }
+
+  .form-input {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    background-color: rgb(249 250 251);
+    border: 1px solid rgb(243 244 246);
+    border-radius: 0.5rem;
+    font-family: 'Tajawal', sans-serif;
+    font-size: 0.875rem;
+    color: #0B132B;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .form-input:focus {
+    border-color: rgba(197, 160, 89, 0.5);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.1);
+  }
+
+  .form-input::placeholder {
+    color: rgba(11, 19, 43, 0.3);
+  }
+}
+
+/* Scroll reveal animation */
+.reveal {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 1s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* CSS fallback: if JS never adds .is-visible, content still appears after 2s */
+@keyframes reveal-fallback {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reveal:not(.is-visible) {
+  animation: reveal-fallback 0.8s ease forwards 2s;
+}
+
+/* Stagger children reveal */
+.reveal-stagger > * {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 1s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal-stagger.is-visible > *:nth-child(1) { transition-delay: 0ms; }
+.reveal-stagger.is-visible > *:nth-child(2) { transition-delay: 150ms; }
+.reveal-stagger.is-visible > *:nth-child(3) { transition-delay: 300ms; }
+.reveal-stagger.is-visible > *:nth-child(4) { transition-delay: 450ms; }
+.reveal-stagger.is-visible > *:nth-child(5) { transition-delay: 600ms; }
+.reveal-stagger.is-visible > *:nth-child(6) { transition-delay: 750ms; }
+
+.reveal-stagger.is-visible > * {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* CSS fallback for stagger: if JS never adds .is-visible, content still appears */
+.reveal-stagger:not(.is-visible) > * {
+  animation: reveal-fallback 0.8s ease forwards 2s;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0B132B;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C5A059;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #D4AF37;
+}
+
+/* Grain texture overlay */
+.grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity: 0.04;
+  pointer-events: none;
+  mix-blend-mode: overlay;
+}
+
+/* Glass effect */
+.glass {
+  background: rgba(11, 19, 43, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.glass-light {
+  background: rgba(248, 249, 250, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* LOCC Glass Panels */
+.locc-card {
+  background: rgba(15, 20, 31, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid #1E2638;
+  border-radius: 0.75rem;
+}
+
+.locc-card-critical {
+  border-color: rgba(255, 42, 95, 0.4);
+  box-shadow: 0 0 15px -5px rgba(255, 42, 95, 0.2);
+}
+
+/* Hold-to-Confirm Button */
+.btn-hold-active {
+  position: relative;
+  overflow: hidden;
+}
+.btn-hold-active::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 0%;
+  background: rgba(255, 42, 95, 0.3);
+  transition: width 2s linear;
+}
+.btn-hold-active:active::after {
+  width: 100%;
+}

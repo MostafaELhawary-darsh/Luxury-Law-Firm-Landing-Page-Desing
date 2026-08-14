@@ -1,0 +1,48 @@
+from __future__ import annotations
+
+from enum import Enum
+
+
+class CaseStatus(str, Enum):
+    OPEN = "OPEN"
+    IN_REVIEW = "IN_REVIEW"
+    ACTIVE = "ACTIVE"
+    ADJOURNED = "ADJOURNED"
+    CLOSED = "CLOSED"
+    CANCELLED = "CANCELLED"
+    APPEALED = "APPEALED"
+
+
+class CaseType(str, Enum):
+    CIVIL = "CIVIL"
+    COMMERCIAL = "COMMERCIAL"
+    CRIMINAL = "CRIMINAL"
+    FAMILY = "FAMILY"
+    ADMINISTRATIVE = "ADMINISTRATIVE"
+    LABOR = "LABOR"
+    CONSTITUTIONAL = "CONSTITUTIONAL"
+    ARBITRATION = "ARBITRATION"
+
+
+class CasePriority(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+
+class HearingType(str, Enum):
+    INITIAL = "INITIAL"
+    FOLLOWUP = "FOLLOWUP"
+    FINAL = "FINAL"
+    EMERGENCY = "EMERGENCY"
+    DELIBERATION = "DELIBERATION"
+
+
+class PartyRole(str, Enum):
+    PLAINTIFF = "PLAINTIFF"
+    DEFENDANT = "DEFENDANT"
+    WITNESS = "WITNESS"
+    EXPERT = "EXPERT"
+    THIRD_PARTY = "THIRD_PARTY"
+    LEGAL_REPRESENTATIVE = "LEGAL_REPRESENTATIVE"
