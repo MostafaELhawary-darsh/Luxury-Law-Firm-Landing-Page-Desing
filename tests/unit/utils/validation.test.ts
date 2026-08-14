@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 
-// Validation utilities
 const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 const validatePhone = (phone: string) => /^\d{10,}$/.test(phone.replace(/\D/g, ''));
 const validateRequired = (value: string) => value.trim().length > 0;

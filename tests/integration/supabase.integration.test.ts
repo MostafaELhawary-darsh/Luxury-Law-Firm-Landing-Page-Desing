@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock Supabase client
 const mockSupabaseClient = {
   from: vi.fn(),
   auth: {
@@ -31,7 +30,6 @@ describe('Supabase Integration Tests', () => {
         message: 'استشارة قانونية',
       };
 
-      // Simulate insertion
       await mockSupabaseClient.from('contacts').insert([contactData]);
 
       expect(mockSupabaseClient.from).toHaveBeenCalledWith('contacts');

@@ -1,4 +1,4 @@
-import { defineConfig } from 'playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 
 const baseURL = 'http://localhost:5173';
 
@@ -29,15 +29,19 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...defineConfig({}).use, channel: 'chrome' },
+      use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'firefox',
-      use: { ...defineConfig({}).use, channel: 'firefox' },
+      use: { ...devices['Desktop Firefox'] },
     },
     {
       name: 'webkit',
-      use: { ...defineConfig({}).use, channel: 'webkit' },
+      use: { ...devices['Desktop Safari'] },
+    },
+    {
+      name: 'Mobile Chrome',
+      use: { ...devices['Pixel 5'] },
     },
   ],
 });

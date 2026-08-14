@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
 
-// Mock Header component for testing
 const Header = () => (
   <header>
     <h1>مؤسسة الهواري للمحاماة</h1>
