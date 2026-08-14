@@ -1,0 +1,15 @@
+# Test coverage
+coverage/
+.nyc_output/
+
+# Test results
+test-results/
+playwright-report/
+.playwright/
+
+# Vitest
+.vitest/
+
+# E2E test files
+tests/**/fixtures/
+tests/**/*.log
