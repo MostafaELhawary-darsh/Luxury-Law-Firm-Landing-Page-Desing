@@ -7,6 +7,7 @@ import type { Case } from '@/lib/firmTypes';
 import { EntityModal, Field, TextInput, TextArea, Select } from './EntityModal';
 import { StatCard, DeleteConfirm } from './ClientManagement';
 import type { PendingAddCommand } from '@/lib/voiceTypes';
+import { useToast } from '@/components/Toast';
 
 interface TaskFormData {
   title: string; description: string; task_type: string; priority: string; status: string;
@@ -29,6 +30,9 @@ export default function TaskManagement({ voiceAdd }: { voiceAdd?: () => PendingA
   const [form, setForm] = useState<TaskFormData>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const { showToast } = useToast();
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -42,17 +46,23 @@ export default function TaskManagement({ voiceAdd }: { voiceAdd?: () => PendingA
 
   const fetchAll = async () => {
     setLoading(true);
-    const [taskRes, attRes, clientRes, caseRes] = await Promise.all([
-      supabase.from('lf_tasks').select('*, assignee:lf_attorneys(name), case:lf_cases(case_number, case_title), client:lf_clients(name)').order('due_date', { ascending: true }),
-      supabase.from('lf_attorneys').select('*').order('name'),
-      supabase.from('lf_clients').select('*').order('name'),
-      supabase.from('lf_cases').select('id, case_number, case_title').order('case_number'),
-    ]);
-    setTasks((taskRes.data as Task[]) || []);
-    setAttorneys((attRes.data as Attorney[]) || []);
-    setClients((clientRes.data as Client[]) || []);
-    setCases((caseRes.data as Case[]) || []);
-    setLoading(false);
+    try {
+      const [taskRes, attRes, clientRes, caseRes] = await Promise.all([
+        supabase.from('lf_tasks').select('*, assignee:lf_attorneys(name), case:lf_cases(case_number, case_title), client:lf_clients(name)').order('due_date', { ascending: true }),
+        supabase.from('lf_attorneys').select('*').order('name'),
+        supabase.from('lf_clients').select('*').order('name'),
+        supabase.from('lf_cases').select('id, case_number, case_title').order('case_number'),
+      ]);
+      setTasks((taskRes.data as Task[]) || []);
+      setAttorneys((attRes.data as Attorney[]) || []);
+      setClients((clientRes.data as Client[]) || []);
+      setCases((caseRes.data as Case[]) || []);
+    } catch (err) {
+      console.error('Failed to fetch tasks data', err);
+      try { showToast('فشل تحميل المهام. تحقق من الاتصال.', 'error'); } catch {}
+    } finally {
+      setLoading(false);
+    }
   };
 
   const openAdd = () => { setForm(emptyForm); setEditingId(null); setModalOpen(true); };
@@ -79,18 +89,42 @@ export default function TaskManagement({ voiceAdd }: { voiceAdd?: () => PendingA
       case_id: form.case_id || null,
       client_id: form.client_id || null,
     };
-    if (editingId) {
-      await supabase.from('lf_tasks').update(payload).eq('id', editingId);
-    } else {
-      await supabase.from('lf_tasks').insert(payload);
+
+    try {
+      if (editingId) {
+        const { error } = await supabase.from('lf_tasks').update(payload).eq('id', editingId);
+        if (error) throw error;
+        try { showToast('تم تحديث المهمة بنجاح', 'success'); } catch {}
+      } else {
+        const { error } = await supabase.from('lf_tasks').insert(payload);
+        if (error) throw error;
+        try { showToast('تم إنشاء المهمة بنجاح', 'success'); } catch {}
+      }
+      setModalOpen(false);
+      fetchAll();
+    } catch (err) {
+      console.error('Save error', err);
+      try { showToast('فشل حفظ المهمة. حاول مرة أخرى.', 'error'); } catch {}
+    } finally {
+      setSaving(false);
     }
-    setSaving(false); setModalOpen(false); fetchAll();
   };
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    await supabase.from('lf_tasks').delete().eq('id', deleteId);
-    setDeleteId(null); fetchAll();
+    setDeleting(true);
+    try {
+      const { error } = await supabase.from('lf_tasks').delete().eq('id', deleteId);
+      if (error) throw error;
+      try { showToast('تم حذف المهمة', 'success'); } catch {}
+      setDeleteId(null);
+      fetchAll();
+    } catch (err) {
+      console.error('Delete error', err);
+      try { showToast('فشل حذف المهمة. حاول مرة أخرى.', 'error'); } catch {}
+    } finally {
+      setDeleting(false);
+    }
   };
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 size={28} className="text-gold animate-spin" /></div>;
@@ -129,7 +163,7 @@ export default function TaskManagement({ voiceAdd }: { voiceAdd?: () => PendingA
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-3 flex-1 min-w-0">
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${task.status === 'مكتملة' ? 'bg-green-50' : task.status === 'قيد التنفيذ' ? 'bg-blue-50' : 'bg-gray-100'}`}>
-                    {task.status === 'مكتملة' ? <CheckCircle2 size={16} className="text-green-600" /> : task.status === 'قيد التنفيذ' ? <Clock size={16} className="text-blue-600" /> : <AlertCircle size={16} className="text-ink/40" />}
+                    {task.status === 'مكتملة' ? <CheckCircle2 size={16} className="text-green-600" /> : task.status === 'قيد التنفيذ' ? <Clock size={16} className="text-blue-600" /> : null}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-body text-xs font-bold text-midnight">{task.title}</p>
@@ -162,7 +196,7 @@ export default function TaskManagement({ voiceAdd }: { voiceAdd?: () => PendingA
       </div>
 
       <EntityModal open={modalOpen} title={editingId ? 'تعديل مهمة' : 'إضافة مهمة جديدة'} onClose={() => setModalOpen(false)} onSubmit={handleSave} loading={saving}>
-        <Field label="عنوان المهمة" required><TextInput value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="مثال: إعداد مذكرة الدفاع" /></Field>
+        <Field label="عنوان المهمة" required><TextInput value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="مثال: إعداد مذكرة ا" /></Field>
         <Field label="الوصف"><TextArea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
         <div className="grid grid-cols-3 gap-4">
           <Field label="نوع المهمة">
