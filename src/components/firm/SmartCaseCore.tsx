@@ -28,6 +28,7 @@ import {
   generateFakeIP, generateFakeMAC,
 } from '@/lib/deadlineEngine';
 import ProceduralEngine from './ProceduralEngine';
+import { useLibrarySearch } from '@/hooks/useLibrarySearch';
 
 // ═══════════════════════════════════════════════════════════
 // M10 CONSTANTS
@@ -166,6 +167,7 @@ const emptyForm: CaseForm = {
 // ═══════════════════════════════════════════════════════════
 
 export default function SmartCaseCore({ voiceAdd }: { voiceAdd?: () => PendingAddCommand | null }) {
+  const { openLibrary } = useLibrarySearch();
   const [cases, setCases] = useState<ScmCase[]>([]);
   const [attorneys, setAttorneys] = useState<Attorney[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1253,6 +1255,35 @@ export default function SmartCaseCore({ voiceAdd }: { voiceAdd?: () => PendingAd
                       <ArrowRight size={12} /> الانتقال للمرحلة التالية
                     </button>
                   )}
+                </div>
+
+                <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="font-body text-[10px] font-bold text-midnight">ربط بالقضايا القانونية</p>
+                      <p className="font-body text-[9px] text-ink/50">فتح المكتبة مع سياق تلقائي من هذه القضية</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        openLibrary({
+                          caseContext: {
+                            caseId: selectedCase.id,
+                            caseNumber: selectedCase.case_number || undefined,
+                            title: selectedCase.title,
+                            legalBasis: selectedCase.legal_basis || undefined,
+                            court: selectedCase.court || undefined,
+                            courtCircuit: selectedCase.court_circuit || undefined,
+                            caseCategory: selectedCase.case_category || undefined,
+                            factsSummary: selectedCase.facts_summary || undefined,
+                            partiesSummary: selectedCase.parties_summary || undefined,
+                          },
+                        });
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-midnight text-cream font-body text-[10px] font-bold hover:bg-midnight-light transition-colors"
+                    >
+                      <BookOpen size={11} /> افتح المكتبة
+                    </button>
+                  </div>
                 </div>
 
                 {/* SCM Pipeline progress */}

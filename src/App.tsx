@@ -57,6 +57,8 @@ function AppInner() {
     registerFirmModuleNav(goToFirmModule);
   }, [registerFirmModuleNav, goToFirmModule]);
 
+
+
   if (libraryOpen) {
     return (
       <>
