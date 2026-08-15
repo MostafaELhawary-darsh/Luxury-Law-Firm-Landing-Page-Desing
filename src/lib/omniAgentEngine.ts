@@ -77,6 +77,14 @@ const patterns: IntentPattern[] = [
           department: 'الأرشيف', execution_order: 4,
         });
       }
+
+      subtasks.push({
+        engine_code: 'M92', engine_name_ar: 'الوكيل الذكي السيادي',
+        task_title: 'تسجيل التدقيق والسيطرة',
+        task_description: `تسجيل نشاط ${projectName} في سجل التدقيق والسيطرة السيادية`,
+        department: 'التنسيق المركزي', execution_order: subtasks.length + 1,
+      });
+
       return subtasks;
     },
   },
@@ -176,7 +184,8 @@ const patterns: IntentPattern[] = [
       return [
         { engine_code: 'M10', engine_name_ar: 'نواة القضية', task_title: `فتح ${caseLabel}`, task_description: `إنشاء ملف ${caseLabel} في النواة`, department: 'القسم القانوني', execution_order: 1 },
         { engine_code: 'M10', engine_name_ar: 'نواة القضية الذكية', task_title: 'تصنيف القضية', task_description: `تصنيف وتقييم ${caseLabel} في النواة الذكية`, department: 'التحليل القانوني', execution_order: 2 },
-        { engine_code: 'M53', engine_name_ar: 'محرك الوثائق السيادي', task_title: 'إعداد المذكرة', task_description: 'توليد مذكرة الدفاع من القوالب', department: 'الأرشيف', execution_order: 3 },
+        { engine_code: 'M92', engine_name_ar: 'الوكيل الذكي السيادي', task_title: 'تسجيل التدقيق والسيطرة', task_description: `تسجيل نشاط ${caseLabel} في سجل التدقيق والسيطرة السيادية`, department: 'التنسيق المركزي', execution_order: 3 },
+        { engine_code: 'M53', engine_name_ar: 'محرك الوثائق السيادي', task_title: 'إعداد المذكرة', task_description: 'توليد مذكرة الدفاع من القوالب', department: 'الأرشيف', execution_order: 4 },
       ];
     },
   },

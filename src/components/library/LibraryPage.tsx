@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { Home } from 'lucide-react';
 import type { LibrarySection, SearchFilters } from '@/lib/types';
 import { defaultFilters } from '@/lib/types';
 import { sectionConfigs } from '@/lib/libraryConfig';
+import { supabase } from '@/lib/supabaseClient';
 import LibraryHome from './LibraryHome';
 import LibraryDashboard from './LibraryDashboard';
 import SearchForm from './SearchForm';
@@ -11,10 +11,6 @@ import ResultsTable, { type ResultRow } from './ResultsTable';
 import DocumentDetail from './DocumentDetail';
 import LawIndexView from './LawIndexView';
 import SubjectIndexView from './SubjectIndexView';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 interface LibraryPageProps {
   onBackToSite: () => void;
@@ -29,19 +25,65 @@ export default function LibraryPage({ onBackToSite }: LibraryPageProps) {
   const [selectedDoc, setSelectedDoc] = useState<ResultRow | null>(null);
   const [docDataSource, setDocDataSource] = useState<string>('');
 
+  // قراءة URL parameters عند تحميل المكون
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const section = params.get('section') as LibrarySection | null;
+    const query = params.get('query') || '';
+
+    if (section && sectionConfigs[section]) {
+      setSection(section);
+
+      // استعادة الفلاتر من URL
+      const newFilters = { ...defaultFilters, query };
+      Object.keys(defaultFilters).forEach((key) => {
+        const value = params.get(key);
+        if (value) {
+          if (key === 'legislationTypes') {
+            (newFilters as any)[key] = value.split(',');
+          } else {
+            (newFilters as any)[key] = value;
+          }
+        }
+      });
+
+      setFilters(newFilters);
+
+      // بدء البحث تلقائياً إذا كان هناك query
+      if (query && section === 'search-legislation') {
+        setResults([]);
+        setHasSearched(false);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [section]);
 
   const handleFilterChange = useCallback((key: string, value: string | string[]) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
+    // تحديث URL تلقائياً عند تغيير الفلاتر
+    const params = new URLSearchParams(window.location.search);
+    if (value && value !== '') {
+      if (Array.isArray(value)) {
+        params.set(key, value.join(','));
+      } else {
+        params.set(key, String(value));
+      }
+    } else {
+      params.delete(key);
+    }
+    window.history.replaceState(null, '', `?${params.toString()}`);
   }, []);
 
   const handleReset = useCallback(() => {
     setFilters(defaultFilters);
     setResults([]);
     setHasSearched(false);
-  }, []);
+    // مسح URL parameters
+    window.history.replaceState(null, '', `?section=${section}`);
+  }, [section]);
 
   const buildQuery = useCallback(
     (config: typeof sectionConfigs[LibrarySection], f: SearchFilters) => {
@@ -176,6 +218,22 @@ export default function LibraryPage({ onBackToSite }: LibraryPageProps) {
     const config = sectionConfigs[section];
     setLoading(true);
     setHasSearched(true);
+
+    // تحديث URL مع معاملات البحث
+    const params = new URLSearchParams();
+    params.set('section', section);
+    params.set('query', filters.query);
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value && value !== '' && key !== 'query') {
+        if (Array.isArray(value)) {
+          params.set(key, value.join(','));
+        } else {
+          params.set(key, String(value));
+        }
+      }
+    });
+    window.history.replaceState(null, '', `?${params.toString()}`);
+
     const query = buildQuery(config, filters);
     const { data, error } = await query;
     if (error) {
@@ -185,7 +243,7 @@ export default function LibraryPage({ onBackToSite }: LibraryPageProps) {
     setLoading(false);
   }, [section, filters, buildQuery]);
 
-  // Auto-search for "today" section
+  // Auto-search for "today" section and trigger auto-search from URL params
   useEffect(() => {
     if (section === 'today') {
       setLoading(true);
@@ -199,8 +257,11 @@ export default function LibraryPage({ onBackToSite }: LibraryPageProps) {
           setResults((data as ResultRow[]) || []);
           setLoading(false);
         });
+    } else if (section === 'search-legislation' && filters.query && !hasSearched) {
+      // البحث التلقائي عند فتح المكتبة من قضية
+      handleSearch();
     }
-  }, [section]);
+  }, [section, filters.query, hasSearched, handleSearch]);
 
   const handleRowClick = (row: ResultRow) => {
     if (!section) return;
