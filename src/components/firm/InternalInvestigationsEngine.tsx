@@ -1,9 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Loader2, Plus, Pencil, Trash2, ChevronRight, X, AlertTriangle,
   Shield, CircuitBoard, Zap, CheckCircle2, Clock, ArrowRight, Search,
   Activity, Server, AlertCircle, BadgeCheck, Search as SearchIcon, DollarSign,
-  FileText, Gavel, Users, Calendar, UserCheck, UserX, Scale,
+  FileText, Gavel, Users, Calendar, UserCheck, UserX, Scale, Sparkles,
 } from 'lucide-react';
 import { supabase, formatDate, formatCurrency } from '@/lib/financeUtils';
 import type {
@@ -124,6 +124,27 @@ export default function InternalInvestigationsEngine({ voiceAdd }: { voiceAdd?: 
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const workflowAI = useMemo(() => {
+    const activeFiles = files.filter((f) => f.stage !== 'closed');
+    const scheduledHearings = files.filter((f) => f.hearing_scheduled);
+    const evidenceGap = files.filter((f) => !f.complainant_name || !f.respondent_name);
+    const highRiskPenalty = files.filter((f) => ['termination', 'suspension', 'demotion'].includes(f.penalty_recommendation || 'none'));
+
+    return {
+      summary: `يُدار حاليًا ${activeFiles.length} ملفاً نشطاً في مسار التحقيقات، مع ${scheduledHearings.length} جلسات مجدولة و${highRiskPenalty.length} حالة تتطلب متابعة تأديبية عالية.`,
+      recommendations: [
+        { title: 'تسريع جلسات الاستماع', note: scheduledHearings.length > 0 ? 'تحتاج الجلسات الحالية إلى تنسيق سريع للمتهمين والجهات المعنية لتجنب التأخير.' : 'لا توجد جلسات مجدولة حاليًا؛ يمكن ضبط جدول جديد في حال ظهور إضافة جديدة.' },
+        { title: 'تدقيق الجهات', note: evidenceGap.length > 0 ? `هناك ${evidenceGap.length} ملفات تفتقد بيانات الجهات الأساسية، وهو ما قد يعرقل قرار التحقيق.` : 'كل الملفات مكتملة من حيث بيانات الأطراف.' },
+        { title: 'مراجعة العقوبات', note: highRiskPenalty.length > 0 ? 'تتطلب العقوبات العالية مراجعة إضافية للتأكد من التناسب والامتثال الداخلي.' : 'لا توجد توصيات عقابية عالية في الملف الحالي.' },
+      ],
+      quickActions: [
+        { label: 'جدولة الاستماع', tone: 'gold' },
+        { label: 'تحديث الأطراف', tone: 'purple' },
+        { label: 'مراجعة العقوبات', tone: 'red' },
+      ],
+    };
+  }, [files]);
 
   useEffect(() => {
     const cmd = voiceAdd?.();
@@ -291,6 +312,49 @@ export default function InternalInvestigationsEngine({ voiceAdd }: { voiceAdd?: 
         <StatCard icon={<AlertCircle size={14} className="text-amber-600" />} label="ملفات نشطة" value={String(activeCount)} valueClass="text-amber-700" />
         <StatCard icon={<Scale size={14} className="text-red-600" />} label="استئنافات مرفوعة" value={String(appealsCount)} valueClass="text-red-700" />
         <StatCard icon={<Calendar size={14} className="text-blue-600" />} label="جلسات مجدولة" value={String(hearingsCount)} valueClass="text-blue-700" />
+      </div>
+
+      <div className="rounded-2xl border border-gold/20 bg-gradient-to-r from-midnight via-midnight to-midnight-light p-4 text-cream shadow-[0_10px_35px_rgba(0,0,0,0.18)]">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <Sparkles size={15} className="text-gold" />
+            <span className="font-heading font-bold text-xs text-gold">ذكاء محرك التحقيقات</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {workflowAI.quickActions.map((item) => (
+              <span key={item.label} className={`px-2 py-1 rounded-full text-[8px] font-bold ${item.tone === 'gold' ? 'bg-gold/20 text-gold' : item.tone === 'purple' ? 'bg-purple-500/20 text-purple-200' : 'bg-red-500/20 text-red-200'}`}>
+                {item.label}
+              </span>
+            ))}
+          </div>
+        </div>
+        <p className="font-body text-[11px] leading-relaxed text-cream/80">{workflowAI.summary}</p>
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
+          {workflowAI.recommendations.map((item) => (
+            <div key={item.title} className="bg-white/5 border border-white/10 rounded-lg p-2.5 hover:bg-white/10 transition-colors">
+              <p className="font-body text-[10px] font-bold text-gold mb-1">{item.title}</p>
+              <p className="font-body text-[9px] leading-relaxed text-cream/70">{item.note}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
+            <p className="font-body text-[9px] text-cream/60">ملفات نشطة</p>
+            <p className="font-heading text-sm font-bold text-gold">{files.filter((f) => f.stage !== 'closed').length}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
+            <p className="font-body text-[9px] text-cream/60">جلسات مجدولة</p>
+            <p className="font-heading text-sm font-bold text-blue-300">{files.filter((f) => f.hearing_scheduled).length}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
+            <p className="font-body text-[9px] text-cream/60">استئنافات</p>
+            <p className="font-heading text-sm font-bold text-red-300">{files.filter((f) => f.appeal_filed).length}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
+            <p className="font-body text-[9px] text-cream/60">عقوبات عالية</p>
+            <p className="font-heading text-sm font-bold text-rose-300">{files.filter((f) => ['termination', 'suspension', 'demotion'].includes(f.penalty_recommendation || 'none')).length}</p>
+          </div>
+        </div>
       </div>
 
       {/* 6-stage workflow */}

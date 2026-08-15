@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Scale, Loader2, Plus, Pencil, Trash2, ChevronRight, X, FileText,
   Users, Calendar, DollarSign, Lock, Shield, CircuitBoard, Zap,
@@ -156,6 +156,27 @@ export default function Arbitration({ voiceAdd }: { voiceAdd?: () => PendingAddC
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const workflowAI = useMemo(() => {
+    const activeCases = cases.filter((c) => c.stage !== 'draft_award');
+    const scheduledHearings = hearings.filter((h) => h.status === 'scheduled' || h.status === 'in_progress');
+    const escrowAlert = cases.filter((c) => (c.escrow_amount || 0) === 0 && c.stage !== 'draft_award');
+    const pendingAwards = cases.filter((c) => (c.award_text || '').trim().length === 0 && c.stage === 'draft_award');
+
+    return {
+      summary: `يُتابع حاليًا ${activeCases.length} قضية تحكيم نشطة، مع ${scheduledHearings.length} جلسات معلقة و${pendingAwards.length} مسودة حكم تحتاج مراجعة سريعة.`,
+      recommendations: [
+        { title: 'استقبال الجلسات', note: scheduledHearings.length > 0 ? 'ترتيب جلسات الوصول الافتراضي مهم لضمان الالتزام بموعد الجلسة وإعداد الأطراف.' : 'لا توجد جلسات مجدولة حاليًا؛ يمكن تهيئة جدول جديد تلقائيًا.' },
+        { title: 'ضمان الأمان', note: escrowAlert.length > 0 ? `توجد ${escrowAlert.length} قضية لا توجد بها أمانة تحكيم مفعلة، ما يرفع مخاطر التنفيذ.` : 'جميع القضايا مرتبطة بقيمة أمانة مناسبة.' },
+        { title: 'مسودة الحكم', note: pendingAwards.length > 0 ? 'المسودات الحالية تحتاج مراجعة رئيس الهيئة قبل اعتمادها وإيداعها في سجل التنفيذ.' : 'لا توجد مسودات معلقة في المرحلة الحالية.' },
+      ],
+      quickActions: [
+        { label: 'تجميع أولويات الجلسات', tone: 'gold' },
+        { label: 'مراجعة المسودات', tone: 'purple' },
+        { label: 'تدقيق الأمانات', tone: 'green' },
+      ],
+    };
+  }, [cases, hearings]);
 
   useEffect(() => {
     const cmd = voiceAdd?.();
@@ -422,6 +443,41 @@ export default function Arbitration({ voiceAdd }: { voiceAdd?: () => PendingAddC
         <StatCard icon={<Award size={14} className="text-green-600" />} label="أحكام نهائية" value={String(finalCases)} valueClass="text-green-700" />
         <StatCard icon={<DollarSign size={14} className="text-gold" />} label="القيمة الإجمالية" value={formatCurrency(totalValue)} valueClass="text-gold" />
         <StatCard icon={<Video size={14} className="text-amber-600" />} label="جلسات مجدولة" value={String(scheduledHearings)} valueClass="text-amber-700" />
+      </div>
+
+      <div className="rounded-2xl border border-gold/20 bg-gradient-to-r from-midnight via-midnight to-midnight-light p-4 text-cream shadow-[0_10px_35px_rgba(0,0,0,0.18)]">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <Sparkles size={15} className="text-gold" />
+            <span className="font-heading font-bold text-xs text-gold">لوحة توجيه التحكيم الذكي</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {workflowAI.quickActions.map((item) => (
+              <span key={item.label} className={`px-2 py-1 rounded-full text-[8px] font-bold ${item.tone === 'gold' ? 'bg-gold/20 text-gold' : item.tone === 'purple' ? 'bg-purple-500/20 text-purple-200' : 'bg-green-500/20 text-green-200'}`}>
+                {item.label}
+              </span>
+            ))}
+          </div>
+        </div>
+        <p className="font-body text-[11px] leading-relaxed text-cream/80">{workflowAI.summary}</p>
+        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
+            <p className="font-body text-[9px] text-cream/60">قضايا في المسار</p>
+            <p className="font-heading text-sm font-bold text-gold">{cases.filter((c) => c.stage !== 'draft_award').length}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
+            <p className="font-body text-[9px] text-cream/60">جلسات قيد الترتيب</p>
+            <p className="font-heading text-sm font-bold text-amber-300">{hearings.filter((h) => h.status === 'scheduled' || h.status === 'in_progress').length}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
+            <p className="font-body text-[9px] text-cream/60">أمانات تحتاج مراجعة</p>
+            <p className="font-heading text-sm font-bold text-emerald-300">{cases.filter((c) => (c.escrow_amount || 0) === 0 && c.stage !== 'draft_award').length}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
+            <p className="font-body text-[9px] text-cream/60">مسودات معلقة</p>
+            <p className="font-heading text-sm font-bold text-purple-300">{cases.filter((c) => (c.award_text || '').trim().length === 0 && c.stage === 'draft_award').length}</p>
+          </div>
+        </div>
       </div>
 
       {/* 3-stage workflow */}

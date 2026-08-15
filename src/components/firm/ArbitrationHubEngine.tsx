@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Loader2, Plus, Pencil, Trash2, ChevronRight, X, AlertTriangle,
   Shield, CircuitBoard, CheckCircle2, Clock, Search,
   Activity, AlertCircle, BadgeCheck, Building2, DollarSign,
   FileText, Scale, Gavel, Store, ShoppingCart, Truck, Megaphone,
   Receipt, Users, Calendar, Landmark, ScrollText, Fingerprint,
-  Lock, Coins,
+  Lock, Coins, Sparkles,
 } from 'lucide-react';
 import { supabase, formatDate, formatCurrency } from '@/lib/financeUtils';
 import type {
@@ -130,6 +130,27 @@ export default function ArbitrationHubEngine({ voiceAdd }: { voiceAdd?: () => Pe
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const workflowAI = useMemo(() => {
+    const activeFiles = files.filter((f) => f.stage !== 'terminated');
+    const pendingAwards = files.filter((f) => f.award_status === 'pending' || f.award_status === 'drafted');
+    const highValue = files.filter((f) => (f.claim_amount || 0) >= 500000);
+    const dataRoomRisk = files.filter((f) => !(f.data_room_access_token || '').trim());
+
+    return {
+      summary: `يتم متابعة ${activeFiles.length} ملفاً نشطاً في مسار التحكيم الدولي، مع ${pendingAwards.length} قرار/مسودة معلقة و${highValue.length} ملف ذي قيمة عالية تستوجب إشرافاً إضافياً.`,
+      recommendations: [
+        { title: 'تسريع الجلسات', note: pendingAwards.length > 0 ? 'تحتاج الملفات ذات القرار المعلق إلى تعيين موعد جلسة متابعة ومراجعة التنفيذ.' : 'لا توجد ملفات معلقة في المرحلة النهائية.' },
+        { title: 'مراجعة البيانات', note: dataRoomRisk.length > 0 ? `توجد ${dataRoomRisk.length} ملفات تفتقد إلى access token لغرفة البيانات، وهو ما يرفع مخاطر التوثيق.` : 'جميع الملفات مرتبطة بغرف بيانات مناسبة.' },
+        { title: 'حالة التثبيت', note: highValue.length > 0 ? 'الملفات عالية القيمة تحتاج تدقيقاً إضافياً في إدارة الدعاوى والرسوم ومعايير التعارض.' : 'لا توجد ملفات عالية القيمة في المراجعة الحالية.' },
+      ],
+      quickActions: [
+        { label: 'مراجعة التنفيذ', tone: 'gold' },
+        { label: 'إشراف البيانات', tone: 'blue' },
+        { label: 'تدقيق الرسوم', tone: 'green' },
+      ],
+    };
+  }, [files]);
 
   useEffect(() => {
     const cmd = voiceAdd?.();
@@ -328,6 +349,49 @@ export default function ArbitrationHubEngine({ voiceAdd }: { voiceAdd?: () => Pe
         <StatCard icon={<ScrollText size={14} className="text-purple-600" />} label="قرارات معلقة" value={String(pendingAwardsCount)} valueClass="text-purple-700" />
         <StatCard icon={<DollarSign size={14} className="text-gold" />} label="إجمالي مبالغ المطالبات" value={formatCurrency(totalClaimAmount)} valueClass="text-gold" />
         <StatCard icon={<Coins size={14} className="text-green-600" />} label="إجمالي الرسوم المحصّلة" value={formatCurrency(totalFeesCollected)} valueClass="text-green-700" />
+      </div>
+
+      <div className="rounded-2xl border border-gold/20 bg-gradient-to-r from-midnight via-midnight to-midnight-light p-4 text-cream shadow-[0_10px_35px_rgba(0,0,0,0.18)]">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <Sparkles size={15} className="text-gold" />
+            <span className="font-heading font-bold text-xs text-gold">ذكاء محرك التحكيم التجاري</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {workflowAI.quickActions.map((item) => (
+              <span key={item.label} className={`px-2 py-1 rounded-full text-[8px] font-bold ${item.tone === 'gold' ? 'bg-gold/20 text-gold' : item.tone === 'blue' ? 'bg-blue-500/20 text-blue-200' : 'bg-green-500/20 text-green-200'}`}>
+                {item.label}
+              </span>
+            ))}
+          </div>
+        </div>
+        <p className="font-body text-[11px] leading-relaxed text-cream/80">{workflowAI.summary}</p>
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
+          {workflowAI.recommendations.map((item) => (
+            <div key={item.title} className="bg-white/5 border border-white/10 rounded-lg p-2.5 hover:bg-white/10 transition-colors">
+              <p className="font-body text-[10px] font-bold text-gold mb-1">{item.title}</p>
+              <p className="font-body text-[9px] leading-relaxed text-cream/70">{item.note}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
+            <p className="font-body text-[9px] text-cream/60">ملفات نشطة</p>
+            <p className="font-heading text-sm font-bold text-gold">{files.filter((f) => f.stage !== 'terminated').length}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
+            <p className="font-body text-[9px] text-cream/60">قرارات معلقة</p>
+            <p className="font-heading text-sm font-bold text-violet-300">{files.filter((f) => f.award_status === 'pending' || f.award_status === 'drafted').length}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
+            <p className="font-body text-[9px] text-cream/60">ملفات عالية القيمة</p>
+            <p className="font-heading text-sm font-bold text-amber-300">{files.filter((f) => (f.claim_amount || 0) >= 500000).length}</p>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-2.5">
+            <p className="font-body text-[9px] text-cream/60">خطر غرف البيانات</p>
+            <p className="font-heading text-sm font-bold text-rose-300">{files.filter((f) => !(f.data_room_access_token || '').trim()).length}</p>
+          </div>
+        </div>
       </div>
 
       {/* 7-stage workflow */}
