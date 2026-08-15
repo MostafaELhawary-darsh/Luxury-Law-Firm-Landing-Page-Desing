@@ -18,6 +18,7 @@ import {
   EXPORT_FORMATS, ACCEPTED_FILE_LABEL,
 } from '@/lib/documentTypes';
 import { analyzeCompliance, type LibrarySource } from '@/lib/complianceEngine';
+import { suggestReferencesForDraft, evaluateDraftQuality } from '@/lib/draftAssistant';
 import type { PendingAddCommand } from '@/lib/voiceTypes';
 import { EntityModal, Field, TextInput, TextArea, Select } from './EntityModal';
 import { StatCard, DeleteConfirm } from './ClientManagement';
@@ -25,7 +26,7 @@ import { StatCard, DeleteConfirm } from './ClientManagement';
 type TabType = 'documents' | 'compliance' | 'drafting' | 'translations' | 'references' | 'exports';
 type ModalType = 'upload' | 'draft' | 'translate' | 'editDoc' | null;
 
-type LibraryEntry = {
+export type LibraryEntry = {
   id: string;
   source_type: string;
   title: string;
@@ -75,6 +76,8 @@ export default function DocumentManagement({ voiceAdd }: { voiceAdd?: () => Pend
   const [analyzing, setAnalyzing] = useState<string | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
   const [compliancePreview, setCompliancePreview] = useState<{ docId: string; docTitle: string; checks: ComplianceCheck[]; html: string } | null>(null);
+  const [suggestedReferences, setSuggestedReferences] = useState<LibraryEntry[]>([]);
+  const [draftQuality, setDraftQuality] = useState<{ score: number; feedback: string[] } | null>(null);
 
   // Upload form
   const [uploadForm, setUploadForm] = useState({
@@ -312,6 +315,13 @@ export default function DocumentManagement({ voiceAdd }: { voiceAdd?: () => Pend
   const handleDraftPreview = () => {
     const generatedText = generateDraftText(draftForm.draft_type, draftForm);
     setDraftPreview(generatedText);
+
+    // Integrate draftAssistant to suggest relevant legal references and evaluate quality
+    const suggestions = suggestReferencesForDraft(draftForm.draft_type, draftForm, libraryEntries);
+    setSuggestedReferences(suggestions.suggestedReferences);
+
+    const quality = evaluateDraftQuality(generatedText, suggestions.suggestedReferences);
+    setDraftQuality(quality);
   };
 
   const handleDraftSave = async () => {
@@ -333,6 +343,8 @@ export default function DocumentManagement({ voiceAdd }: { voiceAdd?: () => Pend
     setSaving(false);
     setModalType(null);
     setDraftPreview(null);
+    setSuggestedReferences([]);
+    setDraftQuality(null);
     setDraftForm({ document_id: documents[0]?.id || '', draft_type: 'contract' });
     fetchAll();
   };

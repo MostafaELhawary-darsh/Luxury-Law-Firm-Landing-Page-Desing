@@ -523,8 +523,8 @@ const StatCard: React.FC<{
   label: string;
   value: number;
   color?: 'gold' | 'orange' | 'green';
-}> = ({ icon: Icon, label, value, color = 'blue' }) => {
-  const colorClasses = {
+}> = ({ icon: Icon, label, value, color = 'gold' }) => {
+  const colorClasses: Record<'gold' | 'orange' | 'green', string> = {
     gold: 'text-gold-400 bg-gold-400/10 border-gold-400/30',
     orange: 'text-orange-400 bg-orange-400/10 border-orange-400/30',
     green: 'text-green-400 bg-green-400/10 border-green-400/30',

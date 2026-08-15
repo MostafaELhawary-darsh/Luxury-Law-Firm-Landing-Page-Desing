@@ -239,6 +239,69 @@ export default function SmartGeoLocationEngine() {
     );
   };
 
+  const createRouteGuidanceAlert = async () => {
+    const activeZone = zones.find((zone) => zone.active) || null;
+    const trafficIndex = Math.min(10, Math.max(3, Math.round((Math.random() * 7) + 2)));
+    const weatherOptions = ['أمطار خفيفة', 'رياح قوية', 'ضباب خفيف', 'سماء صافية', 'مطر غزير'];
+    const weatherCondition = weatherOptions[Math.floor(Math.random() * weatherOptions.length)];
+    const estimatedDelayMin = trafficIndex >= 8 ? 26 : trafficIndex >= 6 ? 16 : 8;
+    const departureNeededAt = new Date(Date.now() + (estimatedDelayMin + 15) * 60000).toISOString();
+    const alertMessage = trafficIndex >= 7
+      ? `توجيه فوري: ازدحام مروري مرتفع على المسار، يوصى بمغادرة الموقع قبل ${Math.max(15, estimatedDelayMin - 8)} دقيقة لضمان حضور الجلسة في الوقت المحدد.`
+      : `توجيه ميداني: حالة الطريق ${weatherCondition}، وقد يطرأ تأخير مقدّر بـ ${estimatedDelayMin} دقيقة؛ يُنصح بتحديث مسار القيادة وتخصيص وقت احتياطي.`;
+
+    const payload = {
+      user_id: 'usr-current',
+      user_name: 'المستخدم الحالي',
+      task_id: 'SESSION-ROUTE-ADJUSTMENT',
+      zone_id: activeZone?.id || null,
+      zone_name: activeZone?.name || 'المسار الميداني',
+      alert_type: trafficIndex >= 7 ? 'TRAFFIC_DELAY' : 'WEATHER_ALERT',
+      severity: estimatedDelayMin >= 20 ? 'critical' : 'warning',
+      message: alertMessage,
+      estimated_delay_min: estimatedDelayMin,
+      traffic_index: trafficIndex,
+      weather_condition: weatherCondition,
+      departure_needed_at: departureNeededAt,
+      session_time: new Date(Date.now() + 45 * 60000).toISOString(),
+      acknowledged: false,
+    };
+
+    const { data, error } = await supabase.from('m107_route_alerts').insert(payload).select('*');
+
+    if (!error && data && data[0]) {
+      const presencePayload = {
+        task_id: 'SESSION-ROUTE-ADJUSTMENT',
+        user_id: 'usr-current',
+        user_name: 'المستخدم الحالي',
+        zone_id: activeZone?.id || 'route-guidance',
+        zone_name: activeZone?.name || 'المسار الميداني',
+        arrival_time: new Date(Date.now() + 35 * 60000).toISOString(),
+        departure_time: departureNeededAt,
+        status: estimatedDelayMin >= 20 ? 'DELAYED_BY_TRAFFIC' : 'ON_SITE',
+        distance_meters: Math.max(150, trafficIndex * 80),
+        estimated_travel_min: Math.max(estimatedDelayMin, 12),
+        delay_risk_min: estimatedDelayMin,
+        delay_alert_sent: true,
+        traffic_index: trafficIndex,
+        weather_alert: weatherCondition,
+      };
+
+      const { data: presenceData, error: presenceError } = await supabase.from('m107_task_presence').insert(presencePayload).select('*');
+
+      if (!presenceError && presenceData && presenceData[0]) {
+        setPresence((prev) => [presenceData[0], ...prev]);
+      }
+
+      setAlerts((prev) => [data[0], ...prev]);
+      setPingResult('تم إنشاء تنبيه توجيه مسار جديد وتحديث حالة المهمة إلى وضع المراقبة والتأخير المحتمل.');
+      setActiveTab('alerts');
+    } else {
+      setPingResult(`فشل إنشاء تنبيه المسار: ${error?.message || 'خطأ غير محدد'}`);
+    }
+    fetchAll();
+  };
+
   const tabs: { id: Tab; label: string; icon: typeof MapPin; count: number }[] = [
     { id: 'zones', label: 'النطاقات الجغرافية', icon: MapPinned, count: zones.length },
     { id: 'attendance', label: 'سجل الحضور', icon: LogIn, count: attendance.length },
@@ -270,6 +333,13 @@ export default function SmartGeoLocationEngine() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={createRouteGuidanceAlert}
+            className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-800 border border-amber-200 rounded-lg font-body text-sm font-medium hover:bg-amber-200 transition-colors"
+          >
+            <AlertTriangle size={16} />
+            توجيه المسار
+          </button>
           <button
             onClick={handlePingLocation}
             disabled={pingLoading}

@@ -1,10 +1,23 @@
 import { useEffect, useState } from 'react';
-import { Calendar, Clock, Gavel, CheckCircle2, XCircle, FileText, Loader2, ChevronDown, ChevronUp, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Calendar, Clock, Gavel, CheckCircle2, XCircle, FileText, Loader2, ChevronDown, ChevronUp, Plus, Pencil, Trash2, AlertTriangle, Cloud } from 'lucide-react';
 import { supabase, formatDate } from '@/lib/financeUtils';
 import type { CourtSession, Case } from '@/lib/firmTypes';
 import { EntityModal, Field, TextInput, TextArea, Select, Checkbox } from './EntityModal';
 import { StatCard, DeleteConfirm } from './ClientManagement';
 import type { PendingAddCommand } from '@/lib/voiceTypes';
+
+interface RouteAlert {
+  id: string;
+  alert_type: string;
+  severity: string;
+  message: string;
+  estimated_delay_min: number;
+  traffic_index: number;
+  weather_condition: string | null;
+  departure_needed_at: string | null;
+  session_time: string | null;
+  acknowledged: boolean;
+}
 
 interface SessionFormData {
   case_id: string; session_date: string; session_time: string; court_name: string;
@@ -30,6 +43,7 @@ export default function JudicialAgenda({ voiceAdd }: { voiceAdd?: () => PendingA
   const [form, setForm] = useState<SessionFormData>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [routeAlerts, setRouteAlerts] = useState<RouteAlert[]>([]);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -45,12 +59,14 @@ export default function JudicialAgenda({ voiceAdd }: { voiceAdd?: () => PendingA
 
   const fetchAll = async () => {
     setLoading(true);
-    const [sessRes, caseRes] = await Promise.all([
+    const [sessRes, caseRes, alertRes] = await Promise.all([
       supabase.from('lf_court_sessions').select('*, case:lf_cases(*)').order('session_date', { ascending: true }),
       supabase.from('lf_cases').select('id, case_number, case_title').order('case_number'),
+      supabase.from('m107_route_alerts').select('*').eq('acknowledged', false).order('created_at', { ascending: false }),
     ]);
     setSessions((sessRes.data as CourtSession[]) || []);
     setCases((caseRes.data as Case[]) || []);
+    setRouteAlerts((alertRes.data as RouteAlert[]) || []);
     setLoading(false);
   };
 
@@ -104,6 +120,18 @@ export default function JudicialAgenda({ voiceAdd }: { voiceAdd?: () => PendingA
 
   const upcoming = sessions.filter((s) => s.status === 'مجدولة');
   const completed = sessions.filter((s) => s.status === 'تمت');
+  const affectedUpcomingCount = upcoming.filter((session) => {
+    const sessionDate = session.session_date ? new Date(`${session.session_date}T${session.session_time || '10:00'}`) : null;
+    if (!sessionDate) return false;
+    return routeAlerts.some((alert) => {
+      const alertSessionAt = alert.session_time ? new Date(alert.session_time).getTime() : null;
+      const departureAt = alert.departure_needed_at ? new Date(alert.departure_needed_at).getTime() : null;
+      if (!alertSessionAt && !departureAt) return false;
+      const windowStart = alertSessionAt ? alertSessionAt - 120 * 60000 : departureAt!;
+      const windowEnd = alertSessionAt ? alertSessionAt + 120 * 60000 : departureAt! + 120 * 60000;
+      return sessionDate.getTime() >= windowStart && sessionDate.getTime() <= windowEnd;
+    });
+  }).length;
 
   return (
     <div className="space-y-6">
@@ -117,18 +145,48 @@ export default function JudicialAgenda({ voiceAdd }: { voiceAdd?: () => PendingA
         </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <StatCard icon={<Calendar size={14} className="text-blue-600" />} label="إجمالي الجلسات" value={String(sessions.length)} valueClass="text-midnight" />
         <StatCard icon={<Clock size={14} className="text-amber-600" />} label="جلسات قادمة" value={String(upcoming.length)} valueClass="text-amber-700" />
         <StatCard icon={<CheckCircle2 size={14} className="text-green-600" />} label="جلسات تمت" value={String(completed.length)} valueClass="text-green-700" />
-        <StatCard icon={<Gavel size={14} className="text-midnight" />} label="المحاكم" value={String(new Set(sessions.map((s) => s.court_name)).size)} valueClass="text-midnight" />
+        <StatCard icon={<AlertTriangle size={14} className={routeAlerts.length > 0 ? "text-red-600" : "text-ink/20"} />} label="تنبيهات طريق" value={String(routeAlerts.length)} valueClass={routeAlerts.length > 0 ? "text-red-700" : "text-ink/40"} />
+        <StatCard icon={<AlertTriangle size={14} className={affectedUpcomingCount > 0 ? "text-red-600" : "text-ink/20"} />} label="جلسات متأثرة" value={String(affectedUpcomingCount)} valueClass={affectedUpcomingCount > 0 ? "text-red-700" : "text-ink/40"} />
       </div>
+
+      {routeAlerts.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={18} className="text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-heading font-bold text-red-900 text-sm mb-1">تنبيهات مروية نشطة قد تؤثر على الجلسات</p>
+              <p className="font-body text-xs text-red-700 leading-relaxed">{routeAlerts[0]?.message}</p>
+              {routeAlerts[0]?.estimated_delay_min > 0 && (
+                <div className="flex items-center gap-2 mt-2 text-xs font-body text-red-600">
+                  <Clock size={12} />
+                  <span>تأخير متوقع: {routeAlerts[0].estimated_delay_min} دقيقة</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div>
         <h3 className="font-heading font-bold text-midnight text-sm mb-3">الجلسات القادمة</h3>
         <div className="space-y-3">
           {upcoming.length === 0 ? <p className="font-body text-xs text-ink/40 py-8 text-center bg-white rounded-xl border border-gray-200">لا توجد جلسات مجدولة</p> :
-            upcoming.map((session) => <SessionCard key={session.id} session={session} expanded={expandedId === session.id} onToggle={() => setExpandedId(expandedId === session.id ? null : session.id)} onEdit={() => openEdit(session)} onDelete={() => setDeleteId(session.id)} />)}
+            upcoming.map((session) => {
+              const affectedAlert = routeAlerts.find((alert) => {
+                const sessionDateTime = new Date(`${session.session_date}T${session.session_time || '10:00'}`);
+                const sessionTime = sessionDateTime.getTime();
+                const alertSessionTime = alert.session_time ? new Date(alert.session_time).getTime() : null;
+                const departureTime = alert.departure_needed_at ? new Date(alert.departure_needed_at).getTime() : null;
+                const windowStart = alertSessionTime ? alertSessionTime - 120 * 60000 : departureTime ?? sessionTime;
+                const windowEnd = alertSessionTime ? alertSessionTime + 120 * 60000 : (departureTime ?? sessionTime) + 120 * 60000;
+                return sessionTime >= windowStart && sessionTime <= windowEnd;
+              });
+              return <SessionCard key={session.id} session={session} affectedAlert={affectedAlert} expanded={expandedId === session.id} onToggle={() => setExpandedId(expandedId === session.id ? null : session.id)} onEdit={() => openEdit(session)} onDelete={() => setDeleteId(session.id)} />;
+            })}
         </div>
       </div>
 
@@ -181,29 +239,69 @@ export default function JudicialAgenda({ voiceAdd }: { voiceAdd?: () => PendingA
   );
 }
 
-function SessionCard({ session, expanded, onToggle, onEdit, onDelete }: { session: CourtSession; expanded: boolean; onToggle: () => void; onEdit: () => void; onDelete: () => void; }) {
+function SessionCard({ session, affectedAlert, expanded, onToggle, onEdit, onDelete }: { session: CourtSession; affectedAlert?: RouteAlert; expanded: boolean; onToggle: () => void; onEdit: () => void; onDelete: () => void; }) {
   const isUpcoming = session.status === 'مجدولة';
+  const isCritical = affectedAlert && affectedAlert.severity === 'critical';
   return (
-    <div className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all group ${isUpcoming ? 'border-amber-200' : 'border-gray-200'}`}>
+    <div className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all group ${
+      affectedAlert
+        ? isCritical ? 'border-red-300 bg-red-50/50' : 'border-amber-300 bg-amber-50/50'
+        : isUpcoming ? 'border-amber-200' : 'border-gray-200'
+    }`}>
       <button onClick={onToggle} className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50/50 transition-colors">
         <div className="flex items-center gap-4 flex-1 min-w-0">
-          <div className={`w-12 h-12 rounded-lg flex flex-col items-center justify-center flex-shrink-0 ${isUpcoming ? 'bg-amber-50' : 'bg-green-50'}`}>
-            <span className={`font-heading font-bold text-sm ${isUpcoming ? 'text-amber-700' : 'text-green-700'}`}>{new Date(session.session_date).getDate()}</span>
-            <span className={`font-body text-[8px] ${isUpcoming ? 'text-amber-600' : 'text-green-600'}`}>{['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'][new Date(session.session_date).getMonth()]}</span>
+          <div className={`w-12 h-12 rounded-lg flex flex-col items-center justify-center flex-shrink-0 ${
+            affectedAlert
+              ? isCritical ? 'bg-red-100' : 'bg-amber-100'
+              : isUpcoming ? 'bg-amber-50' : 'bg-green-50'
+          }`}>
+            {affectedAlert ? (
+              <AlertTriangle size={16} className={isCritical ? 'text-red-600' : 'text-amber-600'} />
+            ) : (
+              <>
+                <span className={`font-heading font-bold text-sm ${isUpcoming ? 'text-amber-700' : 'text-green-700'}`}>{new Date(session.session_date).getDate()}</span>
+                <span className={`font-body text-[8px] ${isUpcoming ? 'text-amber-600' : 'text-green-600'}`}>{['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'][new Date(session.session_date).getMonth()]}</span>
+              </>
+            )}
           </div>
           <div className="flex-1 min-w-0 text-right">
-            <p className="font-body text-xs font-bold text-midnight truncate">{session.case?.case_title || '—'}</p>
+            <div className="flex items-center gap-2 justify-end">
+              <p className="font-body text-xs font-bold text-midnight truncate">{session.case?.case_title || '—'}</p>
+              {affectedAlert && <span className={`text-[10px] font-body font-bold ${isCritical ? 'text-red-600' : 'text-amber-600'}`}>⚠ متأثرة</span>}
+            </div>
             <p className="font-body text-[10px] text-ink/50 truncate">{session.court_name} — {session.circuit}</p>
           </div>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
-          <span className={`px-2 py-0.5 rounded text-[10px] font-body ${isUpcoming ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'}`}>{session.session_type}</span>
+          <span className={`px-2 py-0.5 rounded text-[10px] font-body ${
+            affectedAlert
+              ? isCritical ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+              : isUpcoming ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'
+          }`}>{session.session_type}</span>
           <span className="font-body text-[10px] text-ink/40">{session.session_time}</span>
           {expanded ? <ChevronUp size={16} className="text-ink/40" /> : <ChevronDown size={16} className="text-ink/40" />}
         </div>
       </button>
       {expanded && (
-        <div className="px-5 py-4 border-t border-gray-100 space-y-3">
+        <div className={`px-5 py-4 border-t space-y-3 ${
+          affectedAlert ? (affectedAlert.severity === 'critical' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50') : 'border-gray-100'
+        }`}>
+          {affectedAlert && (
+            <div className={`rounded-lg p-3 border ${
+              affectedAlert.severity === 'critical'
+                ? 'bg-red-100 border-red-300 text-red-900'
+                : 'bg-amber-100 border-amber-300 text-amber-900'
+            }`}>
+              <div className="flex items-start gap-2">
+                {affectedAlert.alert_type === 'TRAFFIC_DELAY' ? <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" /> : <Cloud size={14} className="flex-shrink-0 mt-0.5" />}
+                <div className="text-xs font-body">
+                  <p className="font-bold">{affectedAlert.alert_type === 'TRAFFIC_DELAY' ? 'تنبيه ازدحام مروري' : 'تنبيه حالة طقس'}</p>
+                  <p className="mt-1 text-[11px]">{affectedAlert.message}</p>
+                  {affectedAlert.estimated_delay_min > 0 && <p className="mt-1 text-[10px] font-bold">التأخير المتوقع: {affectedAlert.estimated_delay_min} دقيقة</p>}
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-end gap-1 pb-2 border-b border-gray-50">
             <button onClick={onEdit} className="p-1.5 rounded text-ink/40 hover:text-gold hover:bg-gold/5 transition-colors"><Pencil size={14} /></button>
             <button onClick={onDelete} className="p-1.5 rounded text-ink/40 hover:text-red-500 hover:bg-red-50 transition-colors"><Trash2 size={14} /></button>
