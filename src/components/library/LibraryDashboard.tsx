@@ -24,6 +24,7 @@ import {
   TrendingUp,
   Clock,
   ChevronDown,
+  BookOpen,
 } from 'lucide-react';
 import {
   DOC_TYPE_LABELS,
@@ -34,12 +35,13 @@ import {
   ACCEPTED_FILE_LABEL,
   type LegalDocument,
 } from '@/lib/documentTypes';
+import { buildLegalLibraryPayload, insertLegalLibrarySource, LEGAL_SOURCE_OPTIONS } from '@/lib/legalSourceManager';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-type UploadTab = 'file' | 'url' | 'bulk' | 'manual';
+type UploadTab = 'file' | 'url' | 'bulk' | 'manual' | 'legal-source';
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 
 interface UploadResult {
@@ -111,6 +113,24 @@ export default function LibraryDashboard() {
   // Manual entry state
   const [manualForm, setManualForm] = useState({ title: '', doc_type: 'other', language: 'ar', content_text: '', tags: '' });
   const [manualResult, setManualResult] = useState<UploadResult>({ status: 'idle', message: '' });
+  const [legalSourceForm, setLegalSourceForm] = useState({
+    kind: 'legislation',
+    title: '',
+    number: '',
+    year: new Date().getFullYear().toString(),
+    type: 'قانون',
+    authority: '',
+    publicationDate: '',
+    subject: '',
+    principle: '',
+    courtType: 'النقض',
+    decisionDate: '',
+    author: '',
+    category: 'قانوني',
+    fullText: '',
+    summary: '',
+  });
+  const [legalSourceResult, setLegalSourceResult] = useState<UploadResult>({ status: 'idle', message: '' });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkInputRef = useRef<HTMLInputElement>(null);
@@ -272,6 +292,72 @@ export default function LibraryDashboard() {
     }
   };
 
+  const handleLegalSourceSubmit = async () => {
+    if (!legalSourceForm.title.trim()) return;
+    setLegalSourceResult({ status: 'uploading', message: 'جاري حفظ المصدر التشريعي...' });
+
+    try {
+      const payload = buildLegalLibraryPayload({
+        kind: legalSourceForm.kind as any,
+        title: legalSourceForm.title.trim(),
+        number: legalSourceForm.number.trim() || undefined,
+        year: legalSourceForm.year || new Date().getFullYear(),
+        type: legalSourceForm.type || undefined,
+        authority: legalSourceForm.authority || undefined,
+        publicationDate: legalSourceForm.publicationDate || undefined,
+        subject: legalSourceForm.subject || undefined,
+        principle: legalSourceForm.principle || undefined,
+        courtType: legalSourceForm.courtType || undefined,
+        decisionDate: legalSourceForm.decisionDate || undefined,
+        author: legalSourceForm.author || undefined,
+        category: legalSourceForm.category || undefined,
+        fullText: legalSourceForm.fullText || undefined,
+        summary: legalSourceForm.summary || undefined,
+      });
+
+      const result = await insertLegalLibrarySource({
+        kind: legalSourceForm.kind as any,
+        title: legalSourceForm.title.trim(),
+        number: legalSourceForm.number.trim() || undefined,
+        year: legalSourceForm.year || new Date().getFullYear(),
+        type: legalSourceForm.type || undefined,
+        authority: legalSourceForm.authority || undefined,
+        publicationDate: legalSourceForm.publicationDate || undefined,
+        subject: legalSourceForm.subject || undefined,
+        principle: legalSourceForm.principle || undefined,
+        courtType: legalSourceForm.courtType || undefined,
+        decisionDate: legalSourceForm.decisionDate || undefined,
+        author: legalSourceForm.author || undefined,
+        category: legalSourceForm.category || undefined,
+        fullText: legalSourceForm.fullText || undefined,
+        summary: legalSourceForm.summary || undefined,
+      });
+
+      if (!result.success) throw new Error(result.error || 'فشل حفظ المصدر');
+
+      setLegalSourceResult({ status: 'success', message: `تم حفظ ${payload.table === 'legislation' ? 'التشريع' : payload.table === 'court_rulings' ? 'الحكم' : payload.table === 'fatwas' ? 'الفتوى' : 'المصدر'} بنجاح` });
+      setLegalSourceForm({
+        kind: 'legislation',
+        title: '',
+        number: '',
+        year: new Date().getFullYear().toString(),
+        type: 'قانون',
+        authority: '',
+        publicationDate: '',
+        subject: '',
+        principle: '',
+        courtType: 'النقض',
+        decisionDate: '',
+        author: '',
+        category: 'قانوني',
+        fullText: '',
+        summary: '',
+      });
+    } catch (err) {
+      setLegalSourceResult({ status: 'error', message: 'فشل الحفظ: ' + (err as Error).message });
+    }
+  };
+
   // ===== Delete Document =====
   const handleDelete = async (id: string) => {
     const { error } = await supabase.from('ld_documents').delete().eq('id', id);
@@ -297,6 +383,7 @@ export default function LibraryDashboard() {
     { id: 'url', label: 'استيراد برابط', icon: Link2 },
     { id: 'bulk', label: 'رفع جماعي', icon: Files },
     { id: 'manual', label: 'إدخال يدوي', icon: FileText },
+    { id: 'legal-source', label: 'إدراج قانوني', icon: BookOpen },
   ];
 
   return (
@@ -673,6 +760,177 @@ export default function LibraryDashboard() {
                   <><Loader2 size={18} className="animate-spin" /> جاري الحفظ...</>
                 ) : (
                   <><FileText size={18} /> حفظ المستند</>
+                )}
+              </button>
+            </div>
+          )}
+
+          {activeTab === 'legal-source' && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label="نوع المصدر">
+                  <select
+                    value={legalSourceForm.kind}
+                    onChange={(e) => setLegalSourceForm({ ...legalSourceForm, kind: e.target.value as any })}
+                    className="form-input"
+                  >
+                    {LEGAL_SOURCE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </FormField>
+                <FormField label="العام">
+                  <input
+                    type="number"
+                    value={legalSourceForm.year}
+                    onChange={(e) => setLegalSourceForm({ ...legalSourceForm, year: e.target.value })}
+                    className="form-input"
+                  />
+                </FormField>
+                <FormField label="العنوان">
+                  <input
+                    type="text"
+                    value={legalSourceForm.title}
+                    onChange={(e) => setLegalSourceForm({ ...legalSourceForm, title: e.target.value })}
+                    placeholder="عنوان المصدر أو الحكم أو القانون"
+                    className="form-input"
+                  />
+                </FormField>
+                <FormField label="الرقم / المرجع">
+                  <input
+                    type="text"
+                    value={legalSourceForm.number}
+                    onChange={(e) => setLegalSourceForm({ ...legalSourceForm, number: e.target.value })}
+                    placeholder="رقم التشريع / الحكم / الفتوى"
+                    className="form-input"
+                  />
+                </FormField>
+                {(legalSourceForm.kind === 'legislation' || legalSourceForm.kind === 'regulation') && (
+                  <FormField label="نوع المصدر">
+                    <input
+                      type="text"
+                      value={legalSourceForm.type}
+                      onChange={(e) => setLegalSourceForm({ ...legalSourceForm, type: e.target.value })}
+                      placeholder="قانون / لائحة تنفيذية / قرار"
+                      className="form-input"
+                    />
+                  </FormField>
+                )}
+                {(legalSourceForm.kind === 'ruling' || legalSourceForm.kind === 'fatwa') && (
+                  <FormField label="الموضوع">
+                    <input
+                      type="text"
+                      value={legalSourceForm.subject}
+                      onChange={(e) => setLegalSourceForm({ ...legalSourceForm, subject: e.target.value })}
+                      placeholder="موضوع الحكم أو الفتوى"
+                      className="form-input"
+                    />
+                  </FormField>
+                )}
+                {legalSourceForm.kind === 'ruling' && (
+                  <FormField label="نوع المحكمة / الدائرة">
+                    <input
+                      type="text"
+                      value={legalSourceForm.courtType}
+                      onChange={(e) => setLegalSourceForm({ ...legalSourceForm, courtType: e.target.value })}
+                      placeholder="النقض / الدستورية / الإدارية"
+                      className="form-input"
+                    />
+                  </FormField>
+                )}
+                {(legalSourceForm.kind === 'legislation' || legalSourceForm.kind === 'regulation' || legalSourceForm.kind === 'thesis' || legalSourceForm.kind === 'scholarly') && (
+                  <FormField label="الجهة / المؤلف">
+                    <input
+                      type="text"
+                      value={legalSourceForm.authority || legalSourceForm.author}
+                      onChange={(e) => setLegalSourceForm({
+                        ...legalSourceForm,
+                        authority: e.target.value,
+                        author: e.target.value,
+                      })}
+                      placeholder="الجهة المُصدرة أو المؤلف"
+                      className="form-input"
+                    />
+                  </FormField>
+                )}
+                {(legalSourceForm.kind === 'legislation' || legalSourceForm.kind === 'regulation' || legalSourceForm.kind === 'fatwa' || legalSourceForm.kind === 'ruling') && (
+                  <FormField label="تاريخ النشر / الحكم">
+                    <input
+                      type="date"
+                      value={legalSourceForm.publicationDate || legalSourceForm.decisionDate}
+                      onChange={(e) => setLegalSourceForm({
+                        ...legalSourceForm,
+                        publicationDate: e.target.value,
+                        decisionDate: e.target.value,
+                      })}
+                      className="form-input"
+                    />
+                  </FormField>
+                )}
+                {legalSourceForm.kind === 'scholarly' && (
+                  <FormField label="التصنيف">
+                    <input
+                      type="text"
+                      value={legalSourceForm.category}
+                      onChange={(e) => setLegalSourceForm({ ...legalSourceForm, category: e.target.value })}
+                      placeholder="فقه / قانون / شرعي"
+                      className="form-input"
+                    />
+                  </FormField>
+                )}
+                {legalSourceForm.kind === 'thesis' && (
+                  <FormField label="المؤلف">
+                    <input
+                      type="text"
+                      value={legalSourceForm.author}
+                      onChange={(e) => setLegalSourceForm({ ...legalSourceForm, author: e.target.value })}
+                      placeholder="اسم الباحث"
+                      className="form-input"
+                    />
+                  </FormField>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                <FormField label="ملخص سريع">
+                  <textarea
+                    value={legalSourceForm.summary}
+                    onChange={(e) => setLegalSourceForm({ ...legalSourceForm, summary: e.target.value })}
+                    className="form-input min-h-[100px]"
+                    placeholder="اكتب ملخصاً موجزاً للمصدر القانوني..."
+                  />
+                </FormField>
+                <FormField label="النص الكامل / المحتوى">
+                  <textarea
+                    value={legalSourceForm.fullText}
+                    onChange={(e) => setLegalSourceForm({ ...legalSourceForm, fullText: e.target.value })}
+                    className="form-input min-h-[180px]"
+                    placeholder="أدخل النص الكامل أو المقطع التشريعي..."
+                  />
+                </FormField>
+                {(legalSourceForm.kind === 'ruling' || legalSourceForm.kind === 'fatwa') && (
+                  <FormField label="المبدأ القانوني">
+                    <textarea
+                      value={legalSourceForm.principle}
+                      onChange={(e) => setLegalSourceForm({ ...legalSourceForm, principle: e.target.value })}
+                      className="form-input min-h-[100px]"
+                      placeholder="اكتب المبدأ أو قاعدة الحكم..."
+                    />
+                  </FormField>
+                )}
+              </div>
+
+              {legalSourceResult.status !== 'idle' && <ResultBanner result={legalSourceResult} />}
+
+              <button
+                onClick={handleLegalSourceSubmit}
+                disabled={!legalSourceForm.title.trim() || legalSourceResult.status === 'uploading'}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-gold text-midnight rounded-xl font-body font-medium text-sm hover:bg-gold/90 transition-colors disabled:opacity-50"
+              >
+                {legalSourceResult.status === 'uploading' ? (
+                  <><Loader2 size={18} className="animate-spin" /> جاري حفظ المصدر...</>
+                ) : (
+                  <><BookOpen size={18} /> إضافة مصدر قانوني</>
                 )}
               </button>
             </div>

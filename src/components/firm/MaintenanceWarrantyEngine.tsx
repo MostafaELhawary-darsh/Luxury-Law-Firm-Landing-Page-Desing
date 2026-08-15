@@ -322,8 +322,32 @@ export default function MaintenanceWarrantyEngine({ voiceAdd }: { voiceAdd?: () 
         <StatCard icon={<DollarSign size={14} className="text-gold" />} label="إجمالي تكاليف الصيانة" value={formatCurrency(totalMaintenanceCost)} valueClass="text-gold" />
       </div>
 
-      {/* 6-stage workflow */}
+      {/* First two implementation steps */}
       <div className="bg-midnight rounded-xl p-4 border border-gold/20">
+        <div className="flex items-center gap-2 mb-3">
+          <Activity size={14} className="text-gold" />
+          <span className="font-heading font-bold text-cream text-xs">الخطوات الأولى والثانية — التنفيذ الحالي</span>
+        </div>
+        <div className="grid md:grid-cols-2 gap-3">
+          <div className="rounded-xl border border-gold/20 bg-midnight-light/40 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-6 h-6 rounded-full bg-gold text-midnight text-[10px] font-bold flex items-center justify-center">1</span>
+              <span className="font-body text-[10px] font-bold text-cream">الخطوة الأولى</span>
+            </div>
+            <p className="font-body text-[10px] text-cream/70 leading-relaxed">إنشاء ملف صيانة جديد مع رقم الملف، نوع الملف، اسم المرفق، أصل الصيانة، نوع الخدمة، وبيانات SLA الأساسية.</p>
+          </div>
+          <div className="rounded-xl border border-gold/20 bg-midnight-light/40 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="w-6 h-6 rounded-full bg-gold text-midnight text-[10px] font-bold flex items-center justify-center">2</span>
+              <span className="font-body text-[10px] font-bold text-cream">الخطوة الثانية</span>
+            </div>
+            <p className="font-body text-[10px] text-cream/70 leading-relaxed">ربط الملف بالمحركات المساندة: المستندات M53، التمويل M54، إنترنت الأشياء M107، الضمان M88، ومخطر الوكيل الذكي M92.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* 6-stage workflow */}
+      <div className="bg-midnight rounded-xl p-4 border border-gold/20 mt-4">
         <div className="flex items-center gap-2 mb-3">
           <CircuitBoard size={14} className="text-gold" />
           <span className="font-heading font-bold text-cream text-xs">دورة حياة ملف الصيانة — 6 مراحل</span>

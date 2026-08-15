@@ -4,13 +4,18 @@ import {
   Shield, FileText, Lock, Search, Activity, Server, CheckCircle2,
   Clock, ArrowRight, Eye, Edit3, Printer, Stamp, Droplets,
   ExternalLink, Copy, Hash, Fingerprint, Cpu, CircuitBoard, Zap,
+  Lightbulb, BookOpen, Wand2, Link2, AlertCircle, TrendingUp, Layers,
 } from 'lucide-react';
 import { supabase, formatDate } from '@/lib/financeUtils';
 import { EntityModal, Field, TextInput, TextArea, Select, Checkbox } from './EntityModal';
 import { StatCard, DeleteConfirm } from './ClientManagement';
 import type { PendingAddCommand } from '@/lib/voiceTypes';
+import {
+  improveLegalText, checkLegalCompliance, linkToLegalLibrary, generateImprovedVersion,
+  LEGAL_TEMPLATES, type WriterSuggestion, type ComplianceCheck, type LegalTemplate,
+} from '@/lib/aiLegalWriterEngine';
 
-type Tab = 'documents' | 'sessions' | 'templates' | 'audit';
+type Tab = 'documents' | 'sessions' | 'templates' | 'audit' | 'ai-writer' | 'legal-library';
 
 /* ============================ Config ============================ */
 
@@ -42,6 +47,20 @@ const SESSION_STATUS_CONFIG: Record<string, { label: string; bg: string; text: s
 const TEMPLATE_TYPE_LABELS: Record<string, string> = {
   contract: 'عقد', memo: 'مذكرة قانونية', pleading: 'مذكرة دفاع',
   affidavit: 'إقرار مشهر', power_of_attorney: 'توكيل',
+};
+
+const SUGGESTION_CATEGORY_LABELS: Record<string, { label: string; color: string; icon: string }> = {
+  grammar: { label: 'نحوي', color: 'text-blue-600', icon: 'AlertCircle' },
+  legal: { label: 'قانوني', color: 'text-red-600', icon: 'Lightbulb' },
+  compliance: { label: 'امتثال', color: 'text-amber-600', icon: 'CheckCircle2' },
+  clarity: { label: 'وضوح', color: 'text-green-600', icon: 'Eye' },
+  style: { label: 'أسلوب', color: 'text-purple-600', icon: 'Wand2' },
+};
+
+const SEVERITY_LABELS: Record<string, { label: string; color: string }> = {
+  low: { label: 'منخفضة', color: 'text-green-600' },
+  medium: { label: 'متوسطة', color: 'text-amber-600' },
+  high: { label: 'عالية', color: 'text-red-600' },
 };
 
 const INTEGRATED_ENGINES = [
@@ -87,15 +106,27 @@ interface EditorAudit {
   accessed_fields: string[] | null; ip_address: string | null; created_at: string;
 }
 
+interface AIWriterSession {
+  id: string; document_id: string;
+  suggestions: WriterSuggestion[];
+  complianceChecks: ComplianceCheck[];
+  linkedLaws: string[];
+  improvementScore: number;
+  status: 'analyzing' | 'completed' | 'archived';
+  created_at: string;
+}
+
 /* ============================ Forms ============================ */
 
 interface DocForm {
   document_number: string; document_title: string; document_format: string; stage: string;
   encrypted: boolean; watermark_text: string; description: string; template_used: boolean; template_id: string;
+  linked_laws: string; linked_case_id: string; legal_category: string;
 }
 const emptyDocForm: DocForm = {
   document_number: '', document_title: '', document_format: 'docx', stage: 'draft',
   encrypted: false, watermark_text: '', description: '', template_used: false, template_id: '',
+  linked_laws: '', linked_case_id: '', legal_category: 'contract',
 };
 
 interface TemplateForm {
@@ -349,6 +380,12 @@ export default function GenOfficeEditorEngine({ voiceAdd }: { voiceAdd?: () => P
   const [activeSession, setActiveSession] = useState<EditorSession | null>(null);
   const [sessionPermissions, setSessionPermissions] = useState('edit');
 
+  // AI Writer States
+  const [aiWriterLoading, setAiWriterLoading] = useState(false);
+  const [currentWriterSessions, setCurrentWriterSessions] = useState<AIWriterSession[]>([]);
+  const [selectedWriterSession, setSelectedWriterSession] = useState<AIWriterSession | null>(null);
+  const [aiAnalysisOpen, setAiAnalysisOpen] = useState(false);
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
     const [d, s, t, a] = await Promise.all([
@@ -363,6 +400,35 @@ export default function GenOfficeEditorEngine({ voiceAdd }: { voiceAdd?: () => P
     setAllAudit((a.data as EditorAudit[]) || []);
     setLoading(false);
   }, []);
+
+  const analyzeDocumentWithAI = async (doc: SovereignDocument) => {
+    setAiWriterLoading(true);
+    try {
+      // محاكاة تحليل الوكيل الذكي
+      const suggestions = await improveLegalText(doc.description || '', doc.document_format);
+      const complianceChecks = await checkLegalCompliance(doc.id, doc.description || '', 'SA');
+      const { relevantLaws } = await linkToLegalLibrary(doc.id, doc.description || '');
+
+      const improvementScore = Math.max(0, 100 - suggestions.length * 10);
+
+      const newSession: AIWriterSession = {
+        id: `ai-${Date.now()}`,
+        document_id: doc.id,
+        suggestions,
+        complianceChecks,
+        linkedLaws: relevantLaws,
+        improvementScore,
+        status: 'completed',
+        created_at: new Date().toISOString(),
+      };
+
+      setCurrentWriterSessions((prev) => [...prev, newSession]);
+      setSelectedWriterSession(newSession);
+      setAiAnalysisOpen(true);
+    } finally {
+      setAiWriterLoading(false);
+    }
+  };
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -401,6 +467,7 @@ export default function GenOfficeEditorEngine({ voiceAdd }: { voiceAdd?: () => P
       document_format: doc.document_format, stage: doc.stage,
       encrypted: doc.encrypted || false, watermark_text: doc.watermark_text || '',
       description: doc.description || '', template_used: doc.template_used || false, template_id: doc.template_id || '',
+      linked_laws: '', linked_case_id: '', legal_category: 'contract',
     });
     setEditingId(doc.id);
     setModalKind('doc');
@@ -409,6 +476,21 @@ export default function GenOfficeEditorEngine({ voiceAdd }: { voiceAdd?: () => P
 
   const openAddTemplate = () => {
     setTemplateForm(emptyTemplateForm);
+    setEditingId(null);
+    setModalKind('template');
+    setModalOpen(true);
+  };
+
+  const addTemplateFromLibrary = async (template: LegalTemplate) => {
+    const templateForm: TemplateForm = {
+      template_code: template.id,
+      template_name: template.name,
+      template_name_ar: template.nameAr,
+      template_type: template.type,
+      template_format: 'docx',
+      template_description: `${template.nameAr} - القوانين المرتبطة: ${template.relatedLaws.join(', ')}`,
+    };
+    setTemplateForm(templateForm);
     setEditingId(null);
     setModalKind('template');
     setModalOpen(true);
@@ -551,6 +633,8 @@ export default function GenOfficeEditorEngine({ voiceAdd }: { voiceAdd?: () => P
     { id: 'documents', label: 'المستندات السيادية', icon: FileText },
     { id: 'sessions', label: 'جلسات التحرير', icon: ExternalLink },
     { id: 'templates', label: 'القوالب القانونية', icon: Copy },
+    { id: 'ai-writer', label: 'الوكيل الذكي (M114.AI)', icon: Lightbulb },
+    { id: 'legal-library', label: 'المكتبة القانونية', icon: BookOpen },
     { id: 'audit', label: 'سجل التدقيق', icon: Shield },
   ];
 
@@ -645,10 +729,11 @@ export default function GenOfficeEditorEngine({ voiceAdd }: { voiceAdd?: () => P
                     </div>
                     <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                       <span className="font-body text-[9px] text-ink/30">{formatDate(doc.created_at)}</span>
-                      <div className="flex items-center gap-1">
-                        <button onClick={(e) => { e.stopPropagation(); openEditDoc(doc); }} className="p-1 rounded text-ink/40 hover:text-gold hover:bg-gold/5 transition-colors opacity-0 group-hover:opacity-100"><Pencil size={11} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); applyDroplets(doc); }} className="p-1 rounded text-ink/40 hover:text-purple-600 hover:bg-purple-50 transition-colors opacity-0 group-hover:opacity-100" title="تطبيق علامة مائية"><Droplets size={11} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); setDeleteId(doc.id); setDeleteKind('doc'); }} className="p-1 rounded text-ink/40 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={11} /></button>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={(e) => { e.stopPropagation(); openEditDoc(doc); }} className="p-1 rounded text-ink/40 hover:text-gold hover:bg-gold/5 transition-colors"><Pencil size={11} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); analyzeDocumentWithAI(doc); }} className="p-1 rounded text-ink/40 hover:text-blue-600 hover:bg-blue-50 transition-colors" title="تحليل بواسطة الوكيل الذكي"><Lightbulb size={11} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); applyDroplets(doc); }} className="p-1 rounded text-ink/40 hover:text-purple-600 hover:bg-purple-50 transition-colors" title="تطبيق علامة مائية"><Droplets size={11} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); setDeleteId(doc.id); setDeleteKind('doc'); }} className="p-1 rounded text-ink/40 hover:text-red-500 hover:bg-red-50 transition-colors"><Trash2 size={11} /></button>
                       </div>
                     </div>
                   </div>
@@ -914,6 +999,231 @@ export default function GenOfficeEditorEngine({ voiceAdd }: { voiceAdd?: () => P
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* AI Writer Tab */}
+      {activeTab === 'ai-writer' && (
+        <div className="space-y-4">
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-200">
+            <div className="flex items-start gap-3">
+              <div className="w-12 h-12 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+                <Lightbulb size={20} className="text-white" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-heading font-bold text-midnight text-sm mb-1">الوكيل الذكي للصياغة القانونية (M114.AI)</h3>
+                <p className="font-body text-xs text-ink/60 leading-relaxed">
+                  وكيل ذكاء اصطناعي متخصص يقوم بتحليل وتحسين النصوص القانونية، واقتراح صياغات بديلة أكثر دقة، والتحقق من الامتثال القانوني، والربط مع المكتبة القانونية والقضائية.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard icon={<Lightbulb size={14} className="text-blue-600" />} label="الجلسات المُحللة" value={String(currentWriterSessions.length)} valueClass="text-blue-700" />
+            <StatCard icon={<AlertCircle size={14} className="text-amber-600" />} label="الاقتراحات الإجمالية" value={String(currentWriterSessions.reduce((s, ws) => s + ws.suggestions.length, 0))} valueClass="text-amber-700" />
+            <StatCard icon={<CheckCircle2 size={14} className="text-green-600" />} label="الفحوصات المكتملة" value={String(currentWriterSessions.reduce((s, ws) => s + ws.complianceChecks.length, 0))} valueClass="text-green-700" />
+            <StatCard icon={<Link2 size={14} className="text-purple-600" />} label="الروابط القانونية" value={String(currentWriterSessions.reduce((s, ws) => s + ws.linkedLaws.length, 0))} valueClass="text-purple-700" />
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="font-body text-xs text-ink/50 mb-3">اختر مستند لتحليله بواسطة الوكيل الذكي:</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {docs.slice(0, 6).map((doc) => (
+                <button
+                  key={doc.id}
+                  onClick={() => analyzeDocumentWithAI(doc)}
+                  disabled={aiWriterLoading}
+                  className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 hover:border-blue-400 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-left"
+                >
+                  <FileText size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="font-body text-xs font-bold text-midnight truncate">{doc.document_title}</p>
+                    <p className="font-mono text-[10px] text-ink/40 truncate">{doc.document_number}</p>
+                  </div>
+                  {aiWriterLoading && <Loader2 size={12} className="text-gold animate-spin flex-shrink-0" />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {selectedWriterSession && (
+            <div className="space-y-4">
+              <div className="bg-midnight rounded-xl p-4 border border-gold/20">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp size={14} className="text-gold" />
+                    <span className="font-heading font-bold text-cream text-sm">نتائج التحليل الذكي</span>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-heading font-bold text-gold text-2xl">{selectedWriterSession.improvementScore}%</p>
+                    <p className="font-body text-[10px] text-cream/50">درجة التحسين</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="bg-midnight-light/50 rounded-lg p-2 border border-gold/10">
+                    <p className="font-body text-[9px] text-cream/60">الاقتراحات</p>
+                    <p className="font-heading text-lg text-gold">{selectedWriterSession.suggestions.length}</p>
+                  </div>
+                  <div className="bg-midnight-light/50 rounded-lg p-2 border border-gold/10">
+                    <p className="font-body text-[9px] text-cream/60">فحوصات الامتثال</p>
+                    <p className="font-heading text-lg text-gold">{selectedWriterSession.complianceChecks.length}</p>
+                  </div>
+                  <div className="bg-midnight-light/50 rounded-lg p-2 border border-gold/10">
+                    <p className="font-body text-[9px] text-cream/60">الروابط القانونية</p>
+                    <p className="font-heading text-lg text-gold">{selectedWriterSession.linkedLaws.length}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <p className="font-heading font-bold text-midnight text-sm mb-2">الاقتراحات المقترحة:</p>
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {selectedWriterSession.suggestions.map((suggestion) => (
+                      <div key={suggestion.id} className={`rounded-lg p-3 border ${suggestion.severity === 'high' ? 'bg-red-50 border-red-200' : suggestion.severity === 'medium' ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
+                        <div className="flex items-start gap-2 mb-1">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${suggestion.severity === 'high' ? 'bg-red-100 text-red-700' : suggestion.severity === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                            {SEVERITY_LABELS[suggestion.severity].label}
+                          </span>
+                          <span className="text-[10px] font-bold text-midnight">{suggestion.category}</span>
+                        </div>
+                        <p className="font-body text-[10px] text-ink/70 mb-1"><strong>السبب:</strong> {suggestion.reason}</p>
+                        <div className="bg-white rounded p-2 mb-1">
+                          <p className="font-mono text-[9px] text-ink/50 line-through">{suggestion.originalText}</p>
+                          <p className="font-mono text-[9px] text-green-700 font-bold">→ {suggestion.suggestedText}</p>
+                        </div>
+                        {suggestion.linkedSources && suggestion.linkedSources.length > 0 && (
+                          <p className="font-body text-[9px] text-ink/40">المراجع: {suggestion.linkedSources.join(', ')}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="font-heading font-bold text-midnight text-sm mb-2">فحوصات الامتثال القانوني:</p>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {selectedWriterSession.complianceChecks.map((check) => (
+                      <div key={check.id} className={`rounded-lg p-3 border ${check.severity === 'critical' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+                        <div className="flex items-start gap-2 mb-1">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${check.severity === 'critical' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {check.severity === 'critical' ? 'حرج' : 'تحذير'}
+                          </span>
+                          <span className="text-[10px] font-bold text-midnight">{check.violationType}</span>
+                        </div>
+                        <p className="font-body text-[10px] text-ink/70 mb-1">{check.detail}</p>
+                        <p className="font-body text-[9px] text-green-700 mb-1"><strong>الحل المقترح:</strong> {check.suggestedFix}</p>
+                        <p className="font-body text-[9px] text-ink/40">المادة: {check.relatedArticle}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="font-heading font-bold text-midnight text-sm mb-2">الروابط القانونية والقضائية:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedWriterSession.linkedLaws.map((law) => (
+                      <span key={law} className="px-3 py-1.5 rounded-full bg-blue-50 border border-blue-200 font-body text-[10px] text-blue-700 font-bold">
+                        <Link2 size={10} className="inline mr-1" /> {law}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Legal Library Tab */}
+      {activeTab === 'legal-library' && (
+        <div className="space-y-4">
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 border border-green-200">
+            <div className="flex items-start gap-3">
+              <div className="w-12 h-12 rounded-lg bg-green-600 flex items-center justify-center flex-shrink-0">
+                <BookOpen size={20} className="text-white" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-heading font-bold text-midnight text-sm mb-1">المكتبة القانونية والقضائية المتكاملة</h3>
+                <p className="font-body text-xs text-ink/60 leading-relaxed">
+                  مجموعة شاملة من القوالب الجاهزة للعقود والمذكرات وصحف الدعوى والطعون، مع الربط الكامل بنظام إدارة المعرفة وقاعدة البيانات القانونية.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {LEGAL_TEMPLATES.map((template) => (
+              <div key={template.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 hover:border-green-400 hover:shadow-md transition-all group">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <p className="font-body text-xs font-bold text-midnight">{template.nameAr}</p>
+                    <p className="font-mono text-[10px] text-ink/40">{template.id}</p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded bg-green-50 font-body text-[9px] text-green-700 font-bold">
+                    {TEMPLATE_TYPE_LABELS[template.type] || template.type}
+                  </span>
+                </div>
+
+                <div className="mb-3 pb-3 border-b border-gray-100">
+                  <p className="font-body text-[10px] text-ink/60 leading-relaxed mb-2">
+                    {template.content.split('\n')[0]}...
+                  </p>
+                </div>
+
+                <div className="space-y-2 mb-3">
+                  <p className="font-body text-[9px] font-bold text-ink/40">القوانين المرتبطة:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {template.relatedLaws.map((law) => (
+                      <span key={law} className="px-1.5 py-0.5 rounded bg-blue-50 font-body text-[8px] text-blue-700">
+                        {law}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2 mb-3 pb-3 border-t border-gray-100 pt-3">
+                  <p className="font-body text-[9px] font-bold text-ink/40">المتغيرات المتاحة:</p>
+                  <div className="grid grid-cols-2 gap-1">
+                    {Object.entries(template.variables).slice(0, 4).map(([key, desc]) => (
+                      <span key={key} className="px-1.5 py-0.5 rounded bg-gray-50 font-mono text-[8px] text-ink/50" title={desc}>
+                        {key}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => addTemplateFromLibrary(template)}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-50 text-green-700 rounded-lg font-body text-xs font-bold hover:bg-green-100 transition-colors border border-green-200"
+                >
+                  <Plus size={12} /> استخدام القالب
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-midnight rounded-xl p-4 border border-gold/20">
+            <div className="flex items-center gap-2 mb-3">
+              <Layers size={14} className="text-gold" />
+              <span className="font-heading font-bold text-cream text-xs">التكامل مع الأنظمة الأخرى</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {[
+                { code: 'M10', label: 'نواة القضية' },
+                { code: 'M47', label: 'المستندات المدمجة' },
+                { code: 'M48', label: 'الأرشفة الجماعية' },
+                { code: 'M53', label: 'استوديو المستندات' },
+              ].map((sys) => (
+                <div key={sys.code} className="bg-midnight-light/50 rounded-lg p-2.5 border border-gold/10">
+                  <p className="font-body text-[10px] font-bold text-cream/80">{sys.code}</p>
+                  <p className="font-body text-[9px] text-cream/40">{sys.label}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

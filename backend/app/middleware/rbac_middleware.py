@@ -1,11 +1,81 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
 from fastapi import Depends, HTTPException
 
 from app.core.dependencies import get_current_user
+
+BLOCKED_MODULES = {
+    "quarries-mining": ["M103"],
+    "cross-border-contracts": ["M90"],
+    "import-export": ["M90"],
+    "maritime-commerce": ["M90"],
+    "tourism-hotels": ["M86"],
+    "automotive-trade": ["M94"],
+    "shopping-mall": ["M99"],
+}
+
+ENGINE_TO_MODULE = {
+    "M90": "import-export",
+    "M94": "automotive-trade",
+    "M99": "shopping-mall",
+    "M86": "tourism-hotels",
+    "M103": "quarries-mining",
+}
+
+
+def evaluate_backend_access(
+    module_id: str | None = None,
+    engine_code: str | None = None,
+    granted_modules: list[str] | None = None,
+) -> dict[str, Any]:
+    granted = set(granted_modules or [])
+    target_module = module_id or (ENGINE_TO_MODULE.get(engine_code or "") if engine_code else None)
+
+    if not target_module:
+        return {
+            "allowed": True,
+            "status": 200,
+            "reason": "No module or engine restriction applied.",
+            "blocked_modules": [],
+            "blocked_engines": [],
+            "allowed_modules": sorted(granted),
+        }
+
+    blocked_engines = BLOCKED_MODULES.get(target_module, [])
+    if engine_code and engine_code not in blocked_engines:
+        blocked_engines = []
+
+    if not granted or target_module not in granted:
+        return {
+            "allowed": False,
+            "status": 403,
+            "reason": f"Module {target_module} is not enabled for this tenant and execution is forbidden.",
+            "blocked_modules": [target_module],
+            "blocked_engines": blocked_engines if blocked_engines else ([engine_code] if engine_code else []),
+            "allowed_modules": sorted(granted),
+        }
+
+    if engine_code and engine_code in blocked_engines:
+        return {
+            "allowed": False,
+            "status": 403,
+            "reason": f"Engine {engine_code} is disabled for module {target_module}.",
+            "blocked_modules": [target_module],
+            "blocked_engines": [engine_code],
+            "allowed_modules": sorted(granted),
+        }
+
+    return {
+        "allowed": True,
+        "status": 200,
+        "reason": "Access granted.",
+        "blocked_modules": [],
+        "blocked_engines": [],
+        "allowed_modules": sorted(granted),
+    }
 
 
 @dataclass(frozen=True)
@@ -123,6 +193,18 @@ def require_permission(permission: str) -> Callable:
             raise HTTPException(
                 status_code=403,
                 detail=f"Insufficient permissions for {permission}",
+            )
+
+        module_name = permission.split(":", 1)[0].lower()
+        decision = evaluate_backend_access(
+            module_id=module_name,
+            engine_code=permission.split(":", 1)[0] if permission.startswith("M") else None,
+            granted_modules=user.get("permissions", []) or [role],
+        )
+        if not decision["allowed"]:
+            raise HTTPException(
+                status_code=decision["status"],
+                detail=decision["reason"],
             )
         return user
 

@@ -132,6 +132,7 @@ import FreeProfessionsEngine from './FreeProfessionsEngine';
 import CorporateCommercialEngine from './CorporateCommercialEngine';
 import GenOfficeEditorEngine from './GenOfficeEditorEngine';
 import SmartGeoLocationEngine from './SmartGeoLocationEngine';
+import { canAccessModule } from '@/lib/accessControl';
 
 interface FirmPageProps {
   onBackToSite: () => void;
@@ -338,16 +339,25 @@ const moduleConfig: { id: FirmModule; label: string; icon: typeof Building2 }[] 
 
 export default function FirmManagement({ onBackToSite, pendingAdd, consumePendingAdd }: FirmPageProps) {
   const [activeModule, setActiveModule] = useState<FirmModule>('agenda');
+  const [accessMessage, setAccessMessage] = useState<string | null>(null);
   const { registerFirmModuleNav } = useVoice();
   const pendingRef = useRef<PendingAddCommand | null>(null);
+
+  const grantedModules = ['agenda', 'smart-case', 'clients', 'poa', 'tasks', 'staff', 'banking', 'meetings', 'tracker', 'talent', 'cockpit', 'laas', 'permissions', 'documents', 'internal-tasks', 'omni-agent', 'sovereign-mail', 'risk-engine', 'civil-commercial', 'admin-court', 'state-council', 'economic-court', 'family-court', 'labor-court', 'arbitration', 'dispute-committees', 'execution', 'trademarks', 'patents', 'copyrights', 'cyber-security', 'cyber-crime', 'digital-signature', 'digital-publishing', 'digital-assets', 'commercial-contracts', 'merger-acquisition', 'fdi', 'real-estate', 'distribution', 'maritime-commerce', 'strategic-finance', 'antitrust', 'inheritance', 'endowment', 'civil-contracts', 'compensation', 'joint-property', 'oral-contracts', 'real-estate-security', 'consular-affairs', 'customs-tax', 'environmental', 'energy-resources', 'consumer-protection', 'sports', 'academic', 'pre-university', 'local-administration', 'transport-logistics', 'administrative-governance', 'internal-investigations', 'knowledge-management', 'integrated-documents', 'bulk-archiver', 'boardroom-governance', 'sovereign-storage', 'audio-transcription', 'wellness', 'syndicates', 'medical-institutions', 'engineering-consulting', 'economic-investment', 'embassies-consular', 'cross-border-contracts', 'intl-organizations', 'ngos-civil-society', 'social-insurance', 'labor-relations', 'press-media', 'banking-finance', 'inhouse-legal', 'human-resources', 'compound-hoa', 'sports-clubs', 'family-welfare', 'media-production', 'telecom-it-data', 'real-estate-asset', 'railways-metro', 'legal-accounting', 'tourism-hotels', 'industrial-sector', 'wholesale-retail', 'private-security', 'import-export', 'health-safety', 'marketing-ads', 'automotive-trade', 'automotive-manufacturing', 'fertilizers-chemicals', 'foreign-residency', 'capital-markets', 'shopping-mall', 'library-archive', 'maintenance-warranty', 'integration-synergy', 'quarries-mining', 'ceramics-porcelain', 'arbitration-hub', 'food-security', 'iot-bridge', 'disaster-recovery', 'biometric-gateway', 'vault-connector', 'swarm-intelligence', 'neural-memory', 'sovereign-delegation', 'criminal-law', 'moj-integration', 'corporate-governance', 'crisis-management', 'hse-internal', 'quality-assurance', 'free-professions', 'corporate-commercial', 'genoffice-editor', 'geo-location'];
 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [activeModule]);
 
   const handleFirmModuleNav = useCallback((m: FirmModuleId) => {
+    const decision = canAccessModule(m, grantedModules);
+    if (!decision.allowed) {
+      setAccessMessage(decision.reason);
+      return;
+    }
+    setAccessMessage(null);
     setActiveModule(m);
-  }, []);
+  }, [grantedModules]);
 
   useEffect(() => {
     registerFirmModuleNav(handleFirmModuleNav);
@@ -355,11 +365,19 @@ export default function FirmManagement({ onBackToSite, pendingAdd, consumePendin
 
   useEffect(() => {
     if (pendingAdd) {
+      const decision = canAccessModule(pendingAdd.module, grantedModules);
+      if (!decision.allowed) {
+        setAccessMessage(decision.reason);
+        pendingRef.current = null;
+        consumePendingAdd();
+        return;
+      }
+      setAccessMessage(null);
       setActiveModule(pendingAdd.module);
       pendingRef.current = pendingAdd;
       consumePendingAdd();
     }
-  }, [pendingAdd, consumePendingAdd]);
+  }, [pendingAdd, consumePendingAdd, grantedModules]);
 
   const takePending = () => {
     const p = pendingRef.current;
@@ -438,6 +456,18 @@ export default function FirmManagement({ onBackToSite, pendingAdd, consumePendin
           </div>
         </div>
       </div>
+
+      {accessMessage && (
+        <div className="max-w-7xl mx-auto px-4 lg:px-8 pt-6">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+            <ShieldAlert size={18} className="text-red-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-heading font-bold text-red-900 text-sm">تم رفض الوصول إلى القطاع المطلوب</p>
+              <p className="font-body text-sm text-red-700 mt-1">{accessMessage}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-8">

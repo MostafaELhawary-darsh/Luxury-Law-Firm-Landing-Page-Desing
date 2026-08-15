@@ -18,6 +18,8 @@ import {
 import { EntityModal, Field, TextArea } from './EntityModal';
 import { StatCard } from './ClientManagement';
 import type { PendingAddCommand } from '@/lib/voiceTypes';
+import { evaluateCommandAccess } from '@/lib/accessControl';
+import { executeFullWorkflow } from '@/lib/workflowExecutionEngine';
 
 const ENGINE_ICONS: Record<string, typeof Brain> = {
   Gavel, ShieldAlert, Briefcase, KanbanSquare, DollarSign, Users,
@@ -167,6 +169,24 @@ export default function OmniAgent({ voiceAdd }: { voiceAdd?: () => PendingAddCom
 
   const executeCommand = async () => {
     if (!input.trim() || !decomposition) return;
+    const grantedModules = ['agenda', 'smart-case', 'clients', 'poa', 'tasks', 'staff', 'banking', 'meetings', 'tracker', 'talent', 'cockpit', 'laas', 'permissions', 'documents', 'internal-tasks', 'omni-agent', 'sovereign-mail', 'risk-engine', 'civil-commercial', 'admin-court', 'state-council', 'economic-court', 'family-court', 'labor-court', 'arbitration', 'dispute-committees', 'execution', 'trademarks', 'patents', 'copyrights', 'cyber-security', 'cyber-crime', 'digital-signature', 'digital-publishing', 'digital-assets', 'commercial-contracts', 'merger-acquisition', 'fdi', 'real-estate', 'distribution', 'maritime-commerce', 'strategic-finance', 'antitrust', 'inheritance', 'endowment', 'civil-contracts', 'compensation', 'joint-property', 'oral-contracts', 'real-estate-security', 'consular-affairs', 'customs-tax', 'environmental', 'energy-resources', 'consumer-protection', 'sports', 'academic', 'pre-university', 'local-administration', 'transport-logistics', 'administrative-governance', 'internal-investigations', 'knowledge-management', 'integrated-documents', 'bulk-archiver', 'boardroom-governance', 'sovereign-storage', 'audio-transcription', 'wellness', 'syndicates', 'medical-institutions', 'engineering-consulting', 'economic-investment', 'embassies-consular', 'cross-border-contracts', 'intl-organizations', 'ngos-civil-society', 'social-insurance', 'labor-relations', 'press-media', 'banking-finance', 'inhouse-legal', 'human-resources', 'compound-hoa', 'sports-clubs', 'family-welfare', 'media-production', 'telecom-it-data', 'real-estate-asset', 'railways-metro', 'legal-accounting', 'tourism-hotels', 'industrial-sector', 'wholesale-retail', 'private-security', 'import-export', 'health-safety', 'marketing-ads', 'automotive-trade', 'automotive-manufacturing', 'fertilizers-chemicals', 'foreign-residency', 'capital-markets', 'shopping-mall', 'library-archive', 'maintenance-warranty', 'integration-synergy', 'quarries-mining', 'ceramics-porcelain', 'arbitration-hub', 'food-security', 'iot-bridge', 'disaster-recovery', 'biometric-gateway', 'vault-connector', 'swarm-intelligence', 'neural-memory', 'sovereign-delegation', 'criminal-law', 'moj-integration', 'corporate-governance', 'crisis-management', 'hse-internal', 'quality-assurance', 'free-professions', 'corporate-commercial', 'genoffice-editor', 'geo-location'];
+    const accessDecision = evaluateCommandAccess(decomposition.subtasks, grantedModules);
+    if (!accessDecision.allowed) {
+      try {
+        await supabase.from('m92_audit_logs').insert({
+          command_id: 'access-blocked',
+          action: 'access_denied',
+          actor: 'M92-Authorization',
+          engine_code: accessDecision.blockedEngines[0] || 'M92',
+          detail: `${accessDecision.reason} المحركات المحظورة: ${accessDecision.blockedEngines.join(', ')}`,
+          severity: 'warning',
+        });
+      } catch {
+        // Ignore audit logging failures to preserve the denial flow.
+      }
+      setExecuting(false);
+      return;
+    }
     setExecuting(true);
 
     const { data: cmdData } = await supabase.from('m92_commands').insert({
@@ -209,6 +229,9 @@ export default function OmniAgent({ voiceAdd }: { voiceAdd?: () => PendingAddCom
 
     const { data: insertedSubtasks } = await supabase.from('m92_subtasks').insert(subtaskInserts).select('id, engine_code, task_title');
 
+    // Real workflow execution: trigger M51/M52/M53 operations from subtasks
+    const workflowResult = await executeFullWorkflow(commandId);
+
     for (const st of insertedSubtasks || []) {
       setActiveSubtasks((prev) => ({ ...prev, [st.id]: 'running' }));
       await supabase.from('m92_audit_logs').insert({
@@ -225,6 +248,17 @@ export default function OmniAgent({ voiceAdd }: { voiceAdd?: () => PendingAddCom
       setActiveSubtasks((prev) => ({ ...prev, [st.id]: 'completed' }));
     }
 
+    if (!workflowResult.success) {
+      await supabase.from('m92_audit_logs').insert({
+        command_id: commandId,
+        action: 'workflow_execution_warning',
+        actor: 'M92-WorkflowEngine',
+        engine_code: 'M92',
+        detail: `تنبيه تنفيذ سير العمل: ${workflowResult.error}`,
+        severity: 'warning',
+      });
+    }
+
     const synthesisText = `تم تنفيذ الأمر بنجاح عبر ${decomposition.subtasks.length} محركات بالتوازي. القصد المكتشف: ${decomposition.intentLabel}.`;
 
     await supabase.from('m92_commands').update({
@@ -239,8 +273,12 @@ export default function OmniAgent({ voiceAdd }: { voiceAdd?: () => PendingAddCom
       detail: synthesisText, severity: 'success',
     });
     await supabase.from('m92_audit_logs').insert({
-      command_id: commandId, action: 'command_completed', actor: 'M92-OmniAgent', engine_code: 'M92',
-      detail: 'اكتمال تنفيذ الأمر بنجاح', severity: 'success',
+      command_id: commandId,
+      action: 'command_completed',
+      actor: 'M92-OmniAgent',
+      engine_code: 'M92',
+      detail: `اكتمال تنفيذ الأمر بنجاح | سير العمل: ${workflowResult.status?.successful_steps || 0}/${workflowResult.status?.total_subtasks || 0} خطوات مُنفذة`,
+      severity: 'success',
     });
 
     setExecuting(false);
