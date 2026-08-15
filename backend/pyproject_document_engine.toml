@@ -12,7 +12,7 @@ python-docx = "^0.8.11"
 pandoc = "^2.3"
 pypandoc = "^1.11"
 python-multipart = "^0.0.6"
-fitz = "^0.0.1"  # PyMuPDF fallback
+fitz = "^0.0.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
