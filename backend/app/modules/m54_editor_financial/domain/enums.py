@@ -1,0 +1,40 @@
+from __future__ import annotations
+
+from enum import Enum
+
+
+class DocumentType(str, Enum):
+    INVOICE = "INVOICE"
+    RECEIPT = "RECEIPT"
+    EXPENSE_REPORT = "EXPENSE_REPORT"
+    RETAINER_AGREEMENT = "RETAINER_AGREEMENT"
+    BILLING_STATEMENT = "BILLING_STATEMENT"
+    TRUST_RECEIPT = "TRUST_RECEIPT"
+    SETTLEMENT_SHEET = "SETTLEMENT_SHEET"
+    TAX_FILING = "TAX_FILING"
+
+
+class DocumentStatus(str, Enum):
+    DRAFT = "DRAFT"
+    PENDING_APPROVAL = "PENDING_APPROVAL"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    CANCELLED = "CANCELLED"
+    PAID = "PAID"
+
+
+class LineItemType(str, Enum):
+    CONSULTATION = "CONSULTATION"
+    COURT_FEE = "COURT_FEE"
+    EXPERT_FEE = "EXPERT_FEE"
+    TRAVEL = "TRAVEL"
+    RESEARCH = "RESEARCH"
+    DOCUMENT_PREP = "DOCUMENT_PREP"
+    ADMIN = "ADMIN"
+    OTHER = "OTHER"
+
+
+class ApprovalStatus(str, Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
