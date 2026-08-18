@@ -22,6 +22,17 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://postgres:postgres@localhost:5432/sovereign_legal",
     )
 
+    @property
+    def normalized_database_url(self) -> str:
+        """Normalize DATABASE_URL to include asyncpg if not present."""
+        url = self.DATABASE_URL
+        # If it's postgresql:// without a dialect, add +asyncpg
+        if url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+        return url
+
     JWT_SECRET_KEY: str = os.environ.get(
         "JWT_SECRET_KEY",
         "dev-secret-key-change-in-production-32chars-minimum",
@@ -38,6 +49,16 @@ class Settings(BaseSettings):
         "CORS_ORIGINS",
         "http://localhost:3000,http://localhost:5173,http://localhost:8000",
     ).split(",")
+
+    REDIS_URL: str = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+    BGE_RERANKER_MODEL_PATH: str = os.environ.get(
+        "BGE_RERANKER_MODEL_PATH",
+        "",
+    )
+    BGE_RERANKER_PROVIDER: str = os.environ.get(
+        "BGE_RERANKER_PROVIDER",
+        "CPUExecutionProvider",
+    )
 
     @property
     def jwt_expire_delta_seconds(self) -> int:

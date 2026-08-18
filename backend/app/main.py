@@ -4,12 +4,17 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+import asyncio
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.core.config import settings
-from app.middleware.security_middleware import SecurityMiddleware
+from .core.config import settings
+from .core.pg_notify_listener import listen_for_doc_updates
+from .core.realtime import manager
+from .middleware.security_middleware import SecurityMiddleware
 
 logging.basicConfig(
     level=logging.INFO,
@@ -17,12 +22,36 @@ logging.basicConfig(
 )
 logger: logging.Logger = logging.getLogger(__name__)
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async def on_doc_change(message: dict[str, object]) -> None:
+        case_id = str(message.get("case_id", ""))
+        if not case_id:
+            return
+        await manager.broadcast_to_case(
+            case_id,
+            {
+                "event": "DOCUMENT_CHANGED",
+                "data": message,
+            },
+        )
+
+    listener_task = asyncio.create_task(
+        listen_for_doc_updates(settings.DATABASE_URL, on_doc_change)
+    )
+    try:
+        yield
+    finally:
+        listener_task.cancel()
+
+
 app: FastAPI = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -102,3 +131,13 @@ async def health_check() -> dict[str, Any]:
         "version": settings.APP_VERSION,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@app.websocket("/ws/cases/{case_id}")
+async def websocket_case_updates(websocket: WebSocket, case_id: str) -> None:
+    await manager.connect(case_id, websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(case_id, websocket)

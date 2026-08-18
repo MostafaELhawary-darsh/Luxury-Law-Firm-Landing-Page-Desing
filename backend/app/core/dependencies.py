@@ -6,8 +6,8 @@ from fastapi import Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
-from app.core.config import settings
-from app.core.security import JWTManager
+from .config import settings
+from .security import JWTManager
 
 
 class Base(DeclarativeBase):
@@ -15,7 +15,7 @@ class Base(DeclarativeBase):
 
 
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    settings.normalized_database_url,
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,

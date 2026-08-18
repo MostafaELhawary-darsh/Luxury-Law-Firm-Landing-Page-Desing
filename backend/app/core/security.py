@@ -11,7 +11,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, InvalidHashError
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from app.core.config import settings
+from .config import settings
 
 _aes_key_bytes: bytes = bytes.fromhex(settings.AES_256_KEY)
 _aesgcm: AESGCM = AESGCM(_aes_key_bytes)

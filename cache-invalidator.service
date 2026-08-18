@@ -1,0 +1,16 @@
+[Unit]
+Description=Smart Case Cache Invalidator Worker
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+User=appuser
+WorkingDirectory=/srv/legal-system
+ExecStart=/srv/legal-system/.venv/bin/python -m backend.app.workers.cache_invalidator_worker
+Environment=DATABASE_URL=postgresql://user:password@localhost:5432/legal_db
+Environment=REDIS_URL=redis://localhost:6379/0
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: legal-postgres
+    environment:
+      POSTGRES_DB: legal_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d legal_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis/redis-stack-server:7.2.0-v4
+    container_name: legal-redis
+    ports:
+      - "6379:6379"
+      - "8001:8001"
+    restart: unless-stopped
+
+  api:
+    image: python:3.12-slim
+    container_name: legal-api
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      DATABASE_URL: postgresql://user:password@postgres:5432/legal_db
+      REDIS_URL: redis://redis:6379/0
+      APP_NAME: Sovereign Legal System
+      APP_VERSION: 1.0.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: >
+      sh -c "cd /app && pip install --no-cache-dir -r backend/requirements.txt &&
+             python -c \"import sys; sys.path.insert(0, '/app/backend'); from app.main import app; import uvicorn; uvicorn.run(app, host='0.0.0.0', port=8000, reload=False)\""
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  cache-invalidator:
+    image: python:3.12-slim
+    container_name: legal-cache-invalidator
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      DATABASE_URL: postgresql://user:password@postgres:5432/legal_db
+      REDIS_URL: redis://redis:6379/0
+      INDEX_NAME: idx:semantic_cache
+      INVALIDATION_THRESHOLD: "0.22"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: >
+      sh -c "pip install --no-cache-dir -r backend/requirements.txt &&
+             python -m backend.app.workers.cache_invalidator_worker"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

@@ -119,7 +119,7 @@ const PIPELINE_ICONS: Record<string, typeof Gavel> = {
 // TYPES & FORM
 // ═══════════════════════════════════════════════════════════
 
-type Tab = 'cases' | 'pipeline' | 'case_tree' | 'deadlines' | 'defense_drafts' | 'evidence' | 'precedents' | 'team' | 'audit';
+type Tab = 'cases' | 'pipeline' | 'case_tree' | 'deadlines' | 'defense_drafts' | 'evidence' | 'precedents' | 'team' | 'workspace' | 'audit';
 
 interface CaseForm {
   case_number: string;
@@ -221,6 +221,9 @@ export default function SmartCaseCore({ voiceAdd }: { voiceAdd?: () => PendingAd
   const [teamModalOpen, setTeamModalOpen] = useState(false);
   const [teamForm, setTeamForm] = useState({ member_name: '', member_role: 'محامي', access_level: 'full' });
   const [proceduralEngineOpen, setProceduralEngineOpen] = useState(false);
+  const [workspaceDraftOrder, setWorkspaceDraftOrder] = useState<string[]>([]);
+  const [workspaceFocus, setWorkspaceFocus] = useState<string>('summary');
+  const [draggedDraftId, setDraggedDraftId] = useState<string | null>(null);
 
   // ── Fetch all ──
   const fetchAll = useCallback(async () => {
@@ -623,10 +626,86 @@ export default function SmartCaseCore({ voiceAdd }: { voiceAdd?: () => PendingAd
     { id: 'evidence', label: 'سلسلة الأدلة', icon: Shield, badge: allEvidence.length },
     { id: 'precedents', label: 'السوابق القانونية', icon: BookMarked, badge: allPrecedents.length },
     { id: 'team', label: 'فريق القضية', icon: UserCheck, badge: allTeam.length },
+    { id: 'workspace', label: 'مساحة العمل', icon: Network, badge: 1 },
     { id: 'audit', label: 'سجل التدقيق', icon: History },
   ];
 
   const modeCfg = OPERATING_MODE_CONFIG[globalOperatingMode] || OPERATING_MODE_CONFIG.law_firms;
+  const workspaceCase = selectedCase ?? cases[0] ?? null;
+  const workspaceDrafts = workspaceCase ? defenseDrafts.filter((draft) => draft.scm_case_id === workspaceCase.id) : [];
+
+  useEffect(() => {
+    if (workspaceDrafts.length > 0) {
+      setWorkspaceDraftOrder((current) => {
+        const nextIds = workspaceDrafts.map((draft) => draft.id);
+        const existing = current.filter((id) => nextIds.includes(id));
+        const missing = nextIds.filter((id) => !existing.includes(id));
+        return [...existing, ...missing];
+      });
+    }
+  }, [workspaceCase?.id, workspaceDrafts]);
+
+  const orderedWorkspaceDrafts = workspaceDraftOrder
+    .map((id) => workspaceDrafts.find((draft) => draft.id === id))
+    .filter((draft): draft is M10DefenseDraft => Boolean(draft));
+
+  const workspaceTimeline = workspaceCase ? [
+    { id: 'filing', label: 'قيد الدعوى', date: workspaceCase.filing_date || '—', detail: workspaceCase.case_number || 'تسجيل أولي' },
+    { id: 'tree', label: 'بناء شجرة القضية', date: '—', detail: 'تنظيم الوقائع والأدلة والدفوع' },
+    { id: 'deadline', label: 'الميعاد الإجرائي', date: workspaceCase.next_deadline_date || workspaceCase.next_hearing_date || '—', detail: workspaceCase.next_deadline_label || 'جلسة/إيداع' },
+    { id: 'draft', label: 'صياغة الدفع', date: '—', detail: orderedWorkspaceDrafts[0]?.draft_title || 'مسودة دفاع' },
+  ] : [];
+
+  const workspaceSourceItems = [
+    {
+      id: 'summary',
+      title: 'موجز القضية',
+      source: 'المذكرة الأولية',
+      content: workspaceCase?.facts_summary || 'لا توجد وقائع مسجلة بعد.',
+    },
+    {
+      id: 'legal',
+      title: 'الأساس القانوني',
+      source: 'مواد وأحكام ذات صلة',
+      content: workspaceCase?.legal_basis || 'لا توجد قاعدة قانونية مضافة بعد.',
+    },
+    {
+      id: 'evidence',
+      title: 'الأدلة',
+      source: 'سلسلة الأدلة',
+      content: workspaceCase?.evidence_summary || 'لا توجد أدلة مرفوعة بعد.',
+    },
+    ...orderedWorkspaceDrafts.slice(0, 3).map((draft) => ({
+      id: `draft-${draft.id}`,
+      title: draft.draft_title,
+      source: DRAFT_TYPE_LABELS[draft.draft_type] || draft.draft_type,
+      content: draft.draft_content || draft.legal_gaps_identified || 'مسودة غير مكتملة.',
+    })),
+  ];
+
+  const activeWorkspaceItem = workspaceSourceItems.find((item) => item.id === workspaceFocus) || workspaceSourceItems[0];
+  const workspaceTransitions = orderedWorkspaceDrafts.length > 0
+    ? orderedWorkspaceDrafts.map((draft, index) => ({
+        id: draft.id,
+        text: `فقرة ${index + 1}: ${draft.draft_title} — ${draft.legal_gaps_identified || 'انتقال طبيعي بين الأدلة والدفوع'}`,
+      }))
+    : [
+        { id: 'transition-1', text: 'انتقال أول: من الوقائع إلى الأساس القانوني مع توضيح التلازم بين الدعوى والدفوع.' },
+        { id: 'transition-2', text: 'انتقال ثان: من الأدلة إلى المصلحة الشرعية ومن ثم إلى طلبات المرافعة.' },
+      ];
+
+  const handleWorkspaceReorder = (sourceId: string, targetId: string) => {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+    setWorkspaceDraftOrder((current) => {
+      const next = [...current];
+      const sourceIndex = next.indexOf(sourceId);
+      const targetIndex = next.indexOf(targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return current;
+      const [moved] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+  };
 
   // Merged audit for audit tab
   const mergedAudit: Array<{ id: string; action: string; detail: string | null; actor: string | null; created_at: string; source: 'm10' | 'scm'; ip?: string | null; hash?: string | null; immutable?: boolean }> = [
@@ -926,6 +1005,154 @@ export default function SmartCaseCore({ voiceAdd }: { voiceAdd?: () => PendingAd
               );
             })
           )}
+        </div>
+      )}
+
+      {/* ═══ WORKSPACE TAB ═══ */}
+      {activeTab === 'workspace' && (
+        <div className="space-y-4">
+          <div className="bg-midnight rounded-xl p-4 text-cream border border-gold/20">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2">
+                <Network size={16} className="text-gold" />
+                <span className="font-heading font-bold text-sm">مساحة العمل المزدوجة</span>
+              </div>
+              <span className="px-2 py-1 rounded-full bg-gold/15 text-gold text-[10px] font-bold">Split-Screen Workspace</span>
+            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.9fr] gap-3">
+              <div className="bg-midnight-light/50 rounded-xl border border-gold/10 p-3">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-body text-[10px] font-bold text-gold">المذكرة / التقرير</span>
+                  <button className="px-2 py-1 rounded bg-gold/10 text-gold text-[9px] font-bold">تحديث تلقائي</button>
+                </div>
+                <div className="space-y-2">
+                  {workspaceSourceItems.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setWorkspaceFocus(item.id)}
+                      className={`w-full text-right rounded-lg border p-2.5 transition-all ${workspaceFocus === item.id ? 'border-gold bg-gold/10' : 'border-gray-700 bg-transparent hover:border-gold/30'}`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="font-body text-[10px] font-bold text-cream">{item.title}</span>
+                        <span className="text-[8px] text-cream/50">{item.source}</span>
+                      </div>
+                      <p className="font-body text-[9px] text-cream/70 leading-relaxed line-clamp-3">{item.content}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-body text-[10px] font-bold text-midnight">منبع الوثيقة والحكم</span>
+                  <span className="bg-blue-50 text-blue-600 px-2 py-1 rounded-full text-[8px] font-bold">Highlight</span>
+                </div>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <p className="font-body text-[10px] font-bold text-midnight mb-2">{activeWorkspaceItem.title}</p>
+                  <div className="bg-white border border-gray-100 rounded-md p-2.5 text-[10px] text-ink/70 leading-relaxed">
+                    <span className="bg-amber-100 text-amber-700 px-1 py-0.25 rounded">مستند مرجعي</span>
+                    <p className="mt-2">{activeWorkspaceItem.content}</p>
+                  </div>
+                  <div className="mt-3 rounded-md bg-blue-50 border border-blue-100 p-2">
+                    <p className="font-body text-[9px] font-bold text-blue-700">حكم النقض/المادة</p>
+                    <p className="font-body text-[9px] text-blue-600 mt-1">المادة 79 / الحكم رقم 456/2025 — تم إبراز موضع الاستشهاد داخل النص الأصلي.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <GitBranch size={14} className="text-gold" />
+              <span className="font-heading font-bold text-midnight text-sm">Case Knowledge Graph</span>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-4">
+              <div className="space-y-3">
+                {workspaceTimeline.map((item, index) => (
+                  <div key={item.id} className="flex items-start gap-3">
+                    <div className="flex flex-col items-center">
+                      <div className="w-3 h-3 rounded-full bg-gold ring-4 ring-gold/15" />
+                      {index < workspaceTimeline.length - 1 && <div className="w-px h-10 bg-gray-200 mt-1" />}
+                    </div>
+                    <div className="flex-1 rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-body text-[10px] font-bold text-midnight">{item.label}</span>
+                        <span className="font-body text-[8px] text-ink/40">{item.date}</span>
+                      </div>
+                      <p className="font-body text-[9px] text-ink/50 mt-1">{item.detail}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                <p className="font-body text-[10px] font-bold text-midnight mb-2">العلاقات والمعالجات</p>
+                <div className="space-y-2">
+                  {workspaceTransitions.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setWorkspaceFocus(item.id.startsWith('draft-') ? item.id.replace('draft-', '') : 'summary')}
+                      className="w-full text-right rounded-lg border border-gray-200 bg-white p-2.5 hover:border-gold/40 transition-colors"
+                    >
+                      <span className="font-body text-[9px] text-ink/60 leading-relaxed">{item.text}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2">
+                <Gavel size={14} className="text-gold" />
+                <span className="font-heading font-bold text-midnight text-sm">لوحة صياغة الدفوع المرنة</span>
+              </div>
+              <span className="text-[10px] font-body text-ink/40">Drag & Drop Canvas</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {orderedWorkspaceDrafts.length > 0 ? orderedWorkspaceDrafts.map((draft, index) => (
+                <div
+                  key={draft.id}
+                  draggable
+                  onDragStart={() => setDraggedDraftId(draft.id)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (draggedDraftId && draggedDraftId !== draft.id) {
+                      handleWorkspaceReorder(draggedDraftId, draft.id);
+                    }
+                    setDraggedDraftId(null);
+                  }}
+                  className="rounded-xl border border-gray-200 bg-gray-50 p-3 shadow-sm cursor-move hover:border-gold/40 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="font-body text-[9px] font-bold text-gold">الدفعة {index + 1}</span>
+                    <span className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 text-[8px] font-bold">{DRAFT_TYPE_LABELS[draft.draft_type] || draft.draft_type}</span>
+                  </div>
+                  <p className="font-body text-xs font-bold text-midnight">{draft.draft_title}</p>
+                  <p className="font-body text-[9px] text-ink/50 mt-1 leading-relaxed">{draft.draft_content || draft.legal_gaps_identified || 'مسودة غير مكتملة'}</p>
+                </div>
+              )) : (
+                <div className="md:col-span-2 rounded-xl border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-[10px] text-ink/40">
+                  لا توجد دفوع لتجميعها بعد، أضف مسوّدة جديدة من قسم المسودات.
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 rounded-xl border border-gold/20 bg-gold/5 p-3">
+              <p className="font-body text-[10px] font-bold text-midnight mb-2">الانتقال التلقائي بين الفقرات</p>
+              <div className="space-y-2">
+                {workspaceTransitions.map((transition, index) => (
+                  <div key={transition.id} className="flex items-center gap-2 rounded-lg bg-white border border-gold/10 p-2">
+                    <span className="w-5 h-5 rounded-full bg-gold text-midnight text-[8px] font-bold flex items-center justify-center">{index + 1}</span>
+                    <p className="font-body text-[9px] text-ink/60">{transition.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

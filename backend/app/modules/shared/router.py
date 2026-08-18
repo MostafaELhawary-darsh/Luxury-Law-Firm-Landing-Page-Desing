@@ -7,7 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.dependencies import get_async_db, get_current_user
+from app.core.onnx_reranker import FastONNXReranker
+from app.core.redis_cache import SemanticCache
 from app.middleware.rbac_middleware import require_permission
 from app.modules.shared.domain.internal_message import InternalMessage
 from app.modules.shared.domain.task_ticket import TaskStatus, TaskTicket
@@ -30,6 +33,8 @@ router = APIRouter(
 _audit_service = AuditService()
 _ticket_service = TicketService()
 _message_service = MessageService()
+_reranker = FastONNXReranker(model_path=settings.BGE_RERANKER_MODEL_PATH, provider=settings.BGE_RERANKER_PROVIDER)
+_semantic_cache = SemanticCache(redis_url=settings.REDIS_URL, namespace="legal-rerank")
 
 
 @router.post(
@@ -217,6 +222,73 @@ async def list_inbox(
         offset=offset,
     )
     return [MessageResponse.model_validate(m) for m in messages]
+
+
+@router.post(
+    "/search/rerank",
+    status_code=status.HTTP_200_OK,
+)
+async def rerank_search_results(
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    query = str(payload.get("query", "")).strip()
+    documents = payload.get("documents", [])
+    if not query or not documents:
+        return {
+            "query": query,
+            "results": [],
+            "cache_hit": False,
+            "source": "empty",
+        }
+
+    top_k = int(payload.get("top_k", min(5, len(documents))))
+    threshold = float(payload.get("cache_threshold", 0.78))
+
+    normalized_documents: list[dict[str, Any]] = []
+    for index, document in enumerate(documents):
+        if isinstance(document, dict):
+            normalized_documents.append(
+                {
+                    "id": str(document.get("id", index)),
+                    "text": str(document.get("text") or document.get("content") or ""),
+                    "metadata": document,
+                }
+            )
+        else:
+            normalized_documents.append({"id": str(index), "text": str(document), "metadata": {}})
+
+    cache_key = _semantic_cache.make_cache_key(query, "combined-batch", model_name="bge-reranker-v2-m3")
+    cached_batch = await _semantic_cache.lookup(query, cache_key, threshold=threshold)
+    if cached_batch is not None:
+        return {
+            "query": query,
+            "results": cached_batch.get("results", []),
+            "cache_hit": True,
+            "source": "redis-semantic-cache",
+        }
+
+    ranked_documents = _reranker.rerank(query, normalized_documents, top_k=top_k)
+    await _semantic_cache.store(
+        key=cache_key,
+        score=float(ranked_documents[0]["score"]) if ranked_documents else 0.0,
+        payload={"query": query, "results": ranked_documents},
+        ttl_seconds=1800,
+    )
+
+    return {
+        "query": query,
+        "results": ranked_documents,
+        "cache_hit": False,
+        "source": "onnx-reranker",
+    }
+
+
+@router.delete(
+    "/search/cache",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def invalidate_search_cache() -> None:
+    await _semantic_cache.invalidate_namespace("legal-rerank")
 
 
 @router.get(

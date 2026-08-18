@@ -159,6 +159,19 @@ export interface ResultColumn {
 }
 
 export const sectionConfigs: Record<LibrarySection, SearchSectionConfig> = {
+  dashboard: {
+    title: 'لوحة تحكم المكتبة',
+    subtitle: 'نظرة عامة على المستندات والبحث القانوني',
+    fields: [],
+    showPrecision: false,
+    resultColumns: [
+      { key: 'index', label: 'م', width: 'w-12' },
+      { key: 'title', label: 'العنوان', width: 'flex-1' },
+      { key: 'source', label: 'المصدر', width: 'w-32' },
+      { key: 'actions', label: 'عرض', width: 'w-20' },
+    ],
+    dataSource: 'legislation',
+  },
   today: {
     title: 'تشريعات اليوم',
     subtitle: 'أحدث التشريعات الصادرة في الجريدة الرسمية',

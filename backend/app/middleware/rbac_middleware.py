@@ -5,7 +5,7 @@ from typing import Callable
 
 from fastapi import Depends, HTTPException
 
-from app.core.dependencies import get_current_user
+from ..core.dependencies import get_current_user
 
 
 @dataclass(frozen=True)

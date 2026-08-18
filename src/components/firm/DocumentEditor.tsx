@@ -23,6 +23,7 @@ import {
   Undo2, Redo2, Save, FileDown, FileText, FileType, Eye, EyeOff, Highlighter, Palette,
   ChevronDown, Plus, Trash2, CheckSquare, Clock, AlertCircle, FileEdit, Sparkles, Printer,
   RotateCcw, Columns3, Rows3, Square, PanelRightClose, PanelRightOpen,
+  type LucideIcon,
 } from 'lucide-react';
 
 type ExportFormat = 'html' | 'txt' | 'md' | 'json';
@@ -400,7 +401,7 @@ export default function DocumentEditor() {
     onClick: () => void;
     isActive?: boolean;
     disabled?: boolean;
-    icon: React.ComponentType<{ size?: number; className?: string }>;
+    icon: LucideIcon;
     label: string;
   }) => (
     <button
