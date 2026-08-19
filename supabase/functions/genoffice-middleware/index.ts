@@ -1,11 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+import { corsHeaders as getCorsHeaders, preflight, requireAuthenticatedUser } from "../_shared/security.ts";
 
 const SOVEREIGN_SECRET_RAW = Deno.env.get("GENOFFICE_SOVEREIGN_TOKEN");
 if (!SOVEREIGN_SECRET_RAW) {
@@ -38,9 +33,9 @@ function generateHash(input: string): string {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
+  const corsResponse = preflight(req);
+  if (corsResponse) return corsResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   const url = new URL(req.url);
   const path = url.pathname.replace("/functions/v1/genoffice-middleware", "");
@@ -49,6 +44,8 @@ Deno.serve(async (req: Request) => {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+  const authorization = await requireAuthenticatedUser(supabase, req);
+  if ("response" in authorization) return authorization.response;
 
   try {
     // POST /save — receive document from editor, store metadata + audit

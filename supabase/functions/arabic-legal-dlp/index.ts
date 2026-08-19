@@ -1,11 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+import { corsHeaders as getCorsHeaders, preflight, requireAuthenticatedUser, requirePrivilegedUser } from "../_shared/security.ts";
 
 // HMAC pepper for blind indexing — must be set via environment, fail-closed if missing
 const HMAC_PEPPER_RAW = Deno.env.get("DLP_HMAC_PEPPER");
@@ -161,17 +156,25 @@ function extractEntities(text: string): { entities: DlpEntity[]; maskedText: str
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
+  const corsResponse = preflight(req);
+  if (corsResponse) return corsResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
+  const authorization = await requireAuthenticatedUser(supabase, req);
+  if ("response" in authorization) return authorization.response;
 
   const url = new URL(req.url);
   const path = url.pathname;
+
+  const privilegedPaths = ["/decrypt", "/purge", "/ban-ip", "/unban", "/whitelist", "/rotate-key", "/rewrap", "/key-status"];
+  if (privilegedPaths.some((suffix) => path.endsWith(suffix))) {
+    const privileged = await requirePrivilegedUser(supabase, req);
+    if ("response" in privileged) return privileged.response;
+  }
 
   try {
     // ===== POST /anonymize — Anonymize Arabic legal text =====
