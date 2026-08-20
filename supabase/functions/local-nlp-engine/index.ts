@@ -1,11 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+import { corsHeaders as getCorsHeaders, preflight, requireAuthenticatedUser } from "../_shared/security.ts";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -141,14 +136,16 @@ function detectRiskFlags(text: string, entities: ExtractedEntity[], terms: Legal
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
+  const corsResponse = preflight(req);
+  if (corsResponse) return corsResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+  const authorization = await requireAuthenticatedUser(supabase, req);
+  if ("response" in authorization) return authorization.response;
 
   const url = new URL(req.url);
   const path = url.pathname.replace("/functions/v1/local-nlp-engine", "");

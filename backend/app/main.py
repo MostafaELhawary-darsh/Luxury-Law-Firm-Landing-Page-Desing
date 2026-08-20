@@ -56,7 +56,6 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
         content={
             "module": "server",
             "error": "Internal server error",
-            "detail": str(exc),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )

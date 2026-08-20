@@ -1,11 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+import { corsHeaders as getCorsHeaders, preflight, requirePrivilegedUser } from "../_shared/security.ts";
 
 interface VaultPullRequest {
   provider_code: string;
@@ -31,15 +26,17 @@ async function generateHashChain(action: string, detail: string, previousHash: s
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
+  const corsResponse = preflight(req);
+  if (corsResponse) return corsResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+    const authorization = await requirePrivilegedUser(supabase, req);
+    if ("response" in authorization) return authorization.response;
 
     const url = new URL(req.url);
     const path = url.pathname.split("/").pop();
@@ -148,7 +145,7 @@ Deno.serve(async (req: Request) => {
 
       if (pullError) {
         return new Response(
-          JSON.stringify({ error: "Failed to create pull", detail: pullError.message }),
+          JSON.stringify({ error: "Failed to create pull" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -323,7 +320,7 @@ Deno.serve(async (req: Request) => {
     );
   } catch (err) {
     return new Response(
-      JSON.stringify({ error: "Internal server error", detail: String(err) }),
+      JSON.stringify({ error: "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

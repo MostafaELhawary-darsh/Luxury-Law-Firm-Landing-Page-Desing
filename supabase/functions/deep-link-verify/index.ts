@@ -1,11 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+import { corsHeaders as getCorsHeaders, preflight, requirePrivilegedUser } from "../_shared/security.ts";
 
 // HMAC-SHA256 signing key — must be set via environment, fail-closed if missing
 const SECRET_KEY_RAW = Deno.env.get("DEEPLINK_HMAC_SECRET");
@@ -103,9 +98,9 @@ function generateOtp(): string {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
+  const corsResponse = preflight(req);
+  if (corsResponse) return corsResponse;
+  const corsHeaders = getCorsHeaders(req);
 
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
@@ -116,6 +111,10 @@ Deno.serve(async (req: Request) => {
   const path = url.pathname;
 
   try {
+    if (path.endsWith("/generate") || path.endsWith("/revoke")) {
+      const authorization = await requirePrivilegedUser(supabase, req);
+      if ("response" in authorization) return authorization.response;
+    }
     // ===== POST /generate — Generate a secure deep link =====
     if (path.endsWith("/generate") && req.method === "POST") {
       const body = await req.json();
